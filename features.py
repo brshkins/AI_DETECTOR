@@ -98,10 +98,21 @@ def process_dataset(input_dir, output_dir):
                 # вырез глаз
                 left_eye = crop_region(img, landmarks, LEFT_EYE)
                 right_eye = crop_region(img, landmarks, RIGHT_EYE)
+                if left_eye is None or right_eye is None or left_eye.size == 0 or right_eye.size == 0:
+                    print(f"[!] Глаза не найдены: {path_in}")
+                    continue
+                # ресайз к одному размеру
+                target_size = (64, 64)
+                left_eye = cv2.resize(left_eye, target_size)
+                right_eye = cv2.resize(right_eye, target_size)
                 eyes = cv2.hconcat([left_eye, right_eye])
 
                 # вырез рта
                 mouth = crop_region(img, landmarks, MOUTH)
+                if mouth is None or mouth.size == 0:
+                    print(f"[!] Рот не найден: {path_in}")
+                    continue
+                mouth = cv2.resize(mouth, (64, 64))
 
                 # сохранение
                 eye_path = os.path.join(cls_out, "eyes", fname)
@@ -125,7 +136,7 @@ def process_dataset(input_dir, output_dir):
             print(f"класс {cls} обработан, сохранено {len(pose_data)} записей.")
 
 if __name__ == "__main__":
-    input_dir = "AI_DETECTOR/archive/Driver Drowsiness Dataset (DDD)"
+    input_dir = r"C:/Projects/AI_Detector/AI_DETECTOR/archive/Driver Drowsiness Dataset (DDD)"
     output_dir = "processed_dataset"
     process_dataset(input_dir, output_dir)
     print("обработка завершена! Данные сохранены в processed_dataset/")
