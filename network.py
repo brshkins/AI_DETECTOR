@@ -1,67 +1,77 @@
 import torch
 import torch.nn as nn
-import torchvision.models as models
 
-
-# CNN для обработки изображений (глаза + рот)
-class Face(nn.Module):
-    def __init__(self, out_dim=128, weights=True):
+# --- Depthwise-Separable блок ---
+class DSConv(nn.Module):
+    def __init__(self, in_ch, out_ch, k=3, s=1):
         super().__init__()
-        base = models.resnet18(
-            weights=models.ResNet18_Weights.DEFAULT if weights else None
+        p = k // 2
+        self.block = nn.Sequential(
+            nn.Conv2d(in_ch, in_ch, k, s, p, groups=in_ch, bias=False),  # depthwise
+            nn.BatchNorm2d(in_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(in_ch, out_ch, 1, 1, 0, bias=False),               # pointwise
+            nn.BatchNorm2d(out_ch),
+            nn.ReLU(inplace=True),
         )
-        base.fc = nn.Linear(base.fc.in_features, out_dim)  # -> [B, out_dim]
-        self.cnn = base
+    def forward(self, x): return self.block(x)
 
+# --- Лёгкий CNN-бэкбон для кропов глаз/рта ---
+class TinyBackbone(nn.Module):
+    def __init__(self, out_dim=64, in_ch=3):
+        super().__init__()
+        self.stem = nn.Sequential(
+            nn.Conv2d(in_ch, 16, 3, 2, 1, bias=False),  # 112->56
+            nn.BatchNorm2d(16), nn.ReLU(inplace=True),
+        )
+        self.stage = nn.Sequential(
+            DSConv(16, 32, s=2),   # 56->28
+            DSConv(32, 64, s=2),   # 28->14
+            DSConv(64, 96, s=2),   # 14->7
+        )
+        self.head = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(96, out_dim)
+        )
     def forward(self, x):
-        return self.cnn(x)
+        x = self.stem(x)
+        x = self.stage(x)
+        return self.head(x)   # [B, out_dim]
 
-
-#основная модель
 class DrowsinessNet(nn.Module):
-    def __init__(self, feat_dim=259, hidden=256, num_layers=2):
+    def __init__(self, eye_dim=64, mouth_dim=64, pose_dim=3, hidden=128, num_layers=1):
         super().__init__()
+        self.eye_net = TinyBackbone(out_dim=eye_dim)
+        self.mouth_net = TinyBackbone(out_dim=mouth_dim)
+        feat_dim = eye_dim + mouth_dim + pose_dim  # 64+64+3 = 131
 
-        self.eye_net = Face(128)
-        self.mouth_net = Face(128)
-
-        # двунаправленный LSTM для обработки временных последовательностей
         self.lstm = nn.LSTM(
-            input_size=feat_dim,
-            hidden_size=hidden,
-            num_layers=num_layers,
-            batch_first=True,
-            bidirectional=True
+            input_size=feat_dim, hidden_size=hidden,
+            num_layers=num_layers, batch_first=True, bidirectional=True
         )
-
-        # голова классификатора
         self.fc = nn.Sequential(
-            nn.Linear(hidden * 2, 256),
-            nn.ReLU(),
+            nn.Linear(hidden*2, 128),
+            nn.ReLU(inplace=True),
             nn.Dropout(0.3),
-            nn.Linear(256, 1),
+            nn.Linear(128, 1),
             nn.Sigmoid()
         )
 
     def forward(self, eyes, mouths, poses):
+        # eyes, mouths: [B,T,3,H,W], poses: [B,T,3]
         B, T = eyes.size(0), eyes.size(1)
 
-        # изменение формы входных данных (объединяет батч и время)
-        eyes = eyes.view(B * T, 3, eyes.size(-2), eyes.size(-1))
-        mouths = mouths.view(B * T, 3, mouths.size(-2), mouths.size(-1))
+        eyes_flat   = eyes.view(B*T, 3, eyes.size(-2), eyes.size(-1))
+        mouths_flat = mouths.view(B*T, 3, mouths.size(-2), mouths.size(-1))
 
-        # извлечение признаков
-        f_eye = self.eye_net(eyes)
-        f_mouth = self.mouth_net(mouths)
-        f_pose = poses.view(B * T, -1)
+        f_eye   = self.eye_net(eyes_flat)     # [B*T, eye_dim]
+        f_mouth = self.mouth_net(mouths_flat) # [B*T, mouth_dim]
+        f_pose  = poses.view(B*T, -1)         # [B*T, 3]
 
-        # обработка временных зависимостей
-        feats = torch.cat([f_eye, f_mouth, f_pose], dim=1)
-        feats = feats.view(B, T, -1)
+        feats = torch.cat([f_eye, f_mouth, f_pose], dim=1)  # [B*T, 131]
+        feats = feats.view(B, T, -1)                        # [B, T, 131]
 
-        # LSTM по времени
-        h, _ = self.lstm(feats)
-        h = h.mean(dim=1)
-
-        prob = self.fc(h).squeeze(1)
-        return prob
+        h, _ = self.lstm(feats)             # [B, T, 2*hidden]
+        h = h.mean(1)                       # [B, 2*hidden]
+        return self.fc(h).squeeze(1)        # [B]
