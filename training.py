@@ -1,186 +1,78 @@
-import os
-import random
-import torch
-import torch.nn as nn
-import torch.optim as optim
+import os, random, torch, torch.nn as nn, torch.optim as optim
 from tqdm import tqdm
+from data_loader import get_loaders
+from network import TinyCNN
 
-from data_loader import get_sequence_loaders
-from network import DrowsinessNet
-
-# конфиг
-DATA_DIR = "processed_dataset"
-IMG_SIZE = 112
-
-BATCH_SIZE = 8
-EPOCHS = 5
-
+# ==== настройки ====
+DATA_DIR = r"archive/Driver Drowsiness Dataset (DDD)"
+IMG_SIZE = 160
+BATCH = 32
+EPOCHS = 10
 LR = 2e-3
-WEIGHT_DECAY = 1e-4
+WD = 1e-4
 NUM_WORKERS = 0
 CHECKPOINT_DIR = "checkpoints"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-
-# ограничение числа батчей (ускоряет пробный прогон).
-LIMIT_TRAIN_BATCHES = None
-LIMIT_VAL_BATCHES = None
-
 SEED = 42
 
-def set_seed(seed=SEED):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
 
-def bin_metrics(pred_prob, y_true, thr=0.5):
-    y_pred = (pred_prob >= thr).long()
-    acc = (y_pred == y_true.long()).float().mean().item()
-    tp = ((y_pred == 1) & (y_true == 1)).sum().item()
-    fp = ((y_pred == 1) & (y_true == 0)).sum().item()
-    fn = ((y_pred == 0) & (y_true == 1)).sum().item()
-    precision = tp / (tp + fp + 1e-9)
-    recall = tp / (tp + fn + 1e-9)
-    f1 = 2 * precision * recall / (precision + recall + 1e-9)
-    return acc, f1
-
-# тренировка / валидация
-def train_one_epoch(model, loader, optimizer, scaler, criterion, device, limit_batches=None):
-    model.train()
-    total_loss = total_acc = total_f1 = 0.0
-    n_batches = 0
-
-    it = enumerate(loader)
-    for i, (eyes, mouths, poses, labels) in tqdm(
-        it,
-        total=(limit_batches or len(loader)),
-        desc="train",
-        leave=False
-    ):
-        if limit_batches and i >= limit_batches:
-            break
-
-        eyes = eyes.to(device)
-        mouths = mouths.to(device)
-        poses = poses.to(device)
-        labels = labels.to(device).float()
-
-        optimizer.zero_grad(set_to_none=True)
-        if scaler is not None:
-            with torch.autocast(device_type="cuda", dtype=torch.float16):
-                probs = model(eyes, mouths, poses)   # [B], sigmoid внутри сети
-                loss = criterion(probs, labels)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            probs = model(eyes, mouths, poses)
-            loss = criterion(probs, labels)
-            loss.backward()
-            optimizer.step()
-
-        acc, f1 = bin_metrics(probs.detach(), labels.detach())
-        total_loss += loss.item()
-        total_acc += acc
-        total_f1 += f1
-        n_batches += 1
-
-    return total_loss / max(1, n_batches), total_acc / max(1, n_batches), total_f1 / max(1, n_batches)
+def set_seed(s=SEED):
+    random.seed(s); torch.manual_seed(s); torch.cuda.manual_seed_all(s)
 
 
-@torch.no_grad()
-def evaluate(model, loader, criterion, device, limit_batches=None):
-    model.eval()
-    total_loss = total_acc = total_f1 = 0.0
-    n_batches = 0
-
-    it = enumerate(loader)
-    for i, (eyes, mouths, poses, labels) in tqdm(
-        it,
-        total=(limit_batches or len(loader)),
-        desc="val",
-        leave=False
-    ):
-        if limit_batches and i >= limit_batches:
-            break
-
-        eyes = eyes.to(device)
-        mouths = mouths.to(device)
-        poses = poses.to(device)
-        labels = labels.to(device).float()
-
-        probs = model(eyes, mouths, poses)
-        loss = criterion(probs, labels)
-        acc, f1 = bin_metrics(probs, labels)
-
-        total_loss += loss.item()
-        total_acc += acc
-        total_f1 += f1
-        n_batches += 1
-
-    return total_loss / max(1, n_batches), total_acc / max(1, n_batches), total_f1 / max(1, n_batches)
+def epoch_loop(model, loader, opt, crit, device, train=True):
+    if train: model.train()
+    else: model.eval()
+    total_loss=0; correct=0; n=0
+    pbar = tqdm(loader, leave=False, desc="train" if train else "val")
+    with torch.set_grad_enabled(train):
+        for x, y in pbar:
+            x, y = x.to(device), y.to(device).float()
+            if train: opt.zero_grad(set_to_none=True)
+            logits = model(x)
+            loss = crit(logits, y)
+            if train:
+                loss.backward(); opt.step()
+            prob = torch.sigmoid(logits)
+            pred = (prob>=0.5).long()
+            correct += (pred==y.long()).sum().item()
+            total_loss += loss.item()*x.size(0)
+            n += x.size(0)
+            pbar.set_postfix(loss=f"{total_loss/n:.4f}", acc=f"{correct/n:.3f}")
+    return total_loss/n, correct/n
 
 
-# главный запуск
 if __name__ == "__main__":
     set_seed()
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device:", device)
-    if device.type == "cuda":
-        torch.backends.cudnn.benchmark = True
 
-    # Dataloaders
-    train_loader, val_loader, test_loader, classes = get_sequence_loaders(
-        root_dir=DATA_DIR,
-        batch_size=BATCH_SIZE,
-        img_size=IMG_SIZE,
-        num_workers=NUM_WORKERS
+    train_loader, val_loader, test_loader, classes = get_loaders(
+        DATA_DIR, IMG_SIZE, BATCH, NUM_WORKERS, train_ratio=0.8, val_ratio=0.1
     )
-    print("Классы:", classes)
-    print(f"batches -> train: {len(train_loader)} | val: {len(val_loader)} | test: {len(test_loader)}")
+    print("Classes:", classes)
 
-    # модель
-    model = DrowsinessNet().to(device)
+    model = TinyCNN(num_classes=1).to(device)
+    crit = nn.BCEWithLogitsLoss()
+    opt = optim.AdamW(model.parameters(), lr=LR, weight_decay=WD)
+    sched = optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=2)
 
-    # лосс/оптимизатор/шедулер
-    criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
+    best_val = 1e9; best_path = os.path.join(CHECKPOINT_DIR, "best_simple.pth")
 
-    # AMP scaler (без депрекейта)
-    scaler = torch.amp.GradScaler(device.type) if device.type == "cuda" else None
-
-    best_val_f1 = -1.0
-    best_path = os.path.join(CHECKPOINT_DIR, "best_model.pth")
-
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, EPOCHS+1):
         print(f"\nEpoch {epoch}/{EPOCHS}")
-
-        train_loss, train_acc, train_f1 = train_one_epoch(
-            model, train_loader, optimizer, scaler, criterion, device,
-            limit_batches=LIMIT_TRAIN_BATCHES
-        )
-        val_loss, val_acc, val_f1 = evaluate(
-            model, val_loader, criterion, device,
-            limit_batches=LIMIT_VAL_BATCHES
-        )
-
-        scheduler.step(val_loss)
-
-        print(f"  train: loss {train_loss:.4f}, acc {train_acc:.3f}, f1 {train_f1:.3f}")
-        print(f"  val:   loss {val_loss:.4f}, acc {val_acc:.3f}, f1 {val_f1:.3f}")
-
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
+        tr_loss, tr_acc = epoch_loop(model, train_loader, opt, crit, device, train=True)
+        va_loss, va_acc = epoch_loop(model, val_loader,   opt, crit, device, train=False)
+        sched.step(va_loss)
+        print(f"train: loss {tr_loss:.4f}, acc {tr_acc:.3f} | val: loss {va_loss:.4f}, acc {va_acc:.3f}")
+        if va_loss < best_val:
+            best_val = va_loss
             torch.save(model.state_dict(), best_path)
-            print(f"saved best checkpoint -> {best_path} (F1={best_val_f1:.3f})")
+            print("  ✔ saved:", best_path)
 
-    # финальный тест
-    print("\n[TEST]")
+    # тест
     model.load_state_dict(torch.load(best_path, map_location=device))
-    test_loss, test_acc, test_f1 = evaluate(model, test_loader, criterion, device)
-    print(f"  test:  loss {test_loss:.4f}, acc {test_acc:.3f}, f1 {test_f1:.3f}")
-
-    final_path = os.path.join(CHECKPOINT_DIR, "final_model.pth")
-    torch.save(model.state_dict(), final_path)
-    print(f"final model saved to: {final_path}")
+    te_loss, te_acc = epoch_loop(model, test_loader, opt, crit, device, train=False)
+    print(f"\n[TEST] loss {te_loss:.4f}, acc {te_acc:.3f}")
+    torch.save(model.state_dict(), os.path.join(CHECKPOINT_DIR, "final_simple.pth"))
+    print("final saved -> checkpoints/final_simple.pth")
