@@ -1,4 +1,83 @@
+# Python (ml-model)
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+pyvenv.cfg
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+
+
 ../.venv/Lib
 kaggle.json
 archive/*
 processed_dataset/*
+
+# GO (go-backend)
+
+# Бинарники
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go-backend/bin/
+go-backend/cmd/server/server
+go-backend/cmd/server/server.exe
+
+# Go workspace
+go.work
+go.work.sum
+
+# Go mod
+go-backend/go.sum
+
+# gRPC Auto-generated
+go-backend/pkg/pb/*.pb.go
+go-backend/pkg/pb/*_grpc.pb.go
+go-backend/pkg/pb/*.pb.gw.go
+*.swagger.json
+
+# Vendor
+go-backend/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.iml
+*.sublime-workspace
+
+# os
+.DS_Store
+Thumbs.db
+.directory
+
+# enviroment
+.env
+.env.local
+.env.*.local
+.env.prod
+*.env

@@ -22,7 +22,7 @@ func LoadConfig() *Config {
 	cfg := &Config{
 		GRPCPort:         getEnv("GRPC_PORT", "50051"),
 		HTTPPort:         getEnv("HTTP_PORT", "8080"),
-		PythonServiceURL: getEnv("PYTHON_SERVICE_URL", "localhost:50052"),
+		PythonServiceURL: getEnv("PYTHON_SERVICE_URL", "localhost:9000"),
 		CORSOrigins:      getEnv("CORS_ORIGINS", "http://localhost:3000"),
 		MaxConnections:   getEnvInt("MAX_CONNECTIONS", 1000),
 		RateLimitPerMin:  getEnvInt("RATE_LIMIT_PER_MIN", 100),

@@ -12,6 +12,10 @@ type Metrics struct {
 	totalLatency  atomic.Int64
 	activeClients atomic.Int32
 	lastFrameTime atomic.Int64
+
+	wsConnections atomic.Int64
+	wsMessages    atomic.Int64
+	wsErrors      atomic.Int64
 }
 
 var (
@@ -69,4 +73,47 @@ func (m *Metrics) GetActiveClients() int {
 
 func (m *Metrics) GetLastFrameTime() int64 {
 	return m.lastFrameTime.Load()
+}
+
+func (m *Metrics) IncrementWebSocketConnections() {
+	m.wsConnections.Add(1)
+}
+
+// DecrementWebSocketConnections decrements WebSocket connection count
+func (m *Metrics) DecrementWebSocketConnections() {
+	m.wsConnections.Add(-1)
+}
+
+// GetWebSocketConnections returns current WebSocket connections
+func (m *Metrics) GetWebSocketConnections() int64 {
+	return m.wsConnections.Load()
+}
+
+// IncrementWebSocketMessages increments WebSocket message count
+func (m *Metrics) IncrementWebSocketMessages() {
+	m.wsMessages.Add(1)
+}
+
+// GetWebSocketMessages returns total WebSocket messages
+func (m *Metrics) GetWebSocketMessages() int64 {
+	return m.wsMessages.Load()
+}
+
+// IncrementWebSocketErrors increments WebSocket error count
+func (m *Metrics) IncrementWebSocketErrors() {
+	m.wsErrors.Add(1)
+}
+
+// GetWebSocketErrors returns total WebSocket errors
+func (m *Metrics) GetWebSocketErrors() int64 {
+	return m.wsErrors.Load()
+}
+
+// GetWebSocketMetrics returns WebSocket-specific metrics
+func (m *Metrics) GetWebSocketMetrics() map[string]interface{} {
+	return map[string]interface{}{
+		"connections": m.wsConnections.Load(),
+		"messages":    m.wsMessages.Load(),
+		"errors":      m.wsErrors.Load(),
+	}
 }

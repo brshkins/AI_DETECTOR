@@ -31,7 +31,11 @@ func (h *GRPCHandler) DetectDrowsiness(ctx context.Context, req *pb.VideoFrame) 
 		return nil, status.Error(codes.InvalidArgument, "frame_data is required")
 	}
 
-	log.Printf("Frame #%d, size: %d bytes", req.SequencyNumber, len(req.FrameData))
+	if h.grpcClient == nil {
+		return nil, status.Error(codes.Unavailable, "grpc client is nil")
+	}
+
+	log.Printf("Frame #%d, size: %d bytes", req.SequenceNumber, len(req.FrameData))
 
 	result, err := h.grpcClient.ProcessFrame(ctx, req)
 	if err != nil {
@@ -44,7 +48,7 @@ func (h *GRPCHandler) DetectDrowsiness(ctx context.Context, req *pb.VideoFrame) 
 	h.metrics.RecordLatency(duration)
 	h.metrics.IncrementFrames()
 
-	log.Printf("Frame #%d processed in %v, drowsy: %v", req.SequencyNumber, duration, result.IsDrowsy)
+	log.Printf("Frame #%d processed in %v, drowsy: %v", req.SequenceNumber, duration, result.IsDrowsy)
 	return result, nil
 }
 

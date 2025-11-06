@@ -26,7 +26,7 @@ func TestGRPCDetectDrowsiness(t *testing.T) {
 	req := &pb.VideoFrame{
 		FrameData:      []byte("test frame data"),
 		Timestamp:      time.Now().UnixMilli(),
-		SequencyNumber: 1,
+		SequenceNumber: 1,
 	}
 
 	// Вызов
@@ -40,7 +40,7 @@ func TestGRPCDetectDrowsiness(t *testing.T) {
 		t.Fatalf("Result is nil")
 	}
 
-	t.Logf("Success! drowsy=%v, score=%.2f", result.IsDrowsy, result.DrowsinnesScore)
+	t.Logf("Success! drowsy=%v, score=%.2f", result.IsDrowsy, result.DrowsinessScore)
 }
 
 func TestGRPCHealth(t *testing.T) {

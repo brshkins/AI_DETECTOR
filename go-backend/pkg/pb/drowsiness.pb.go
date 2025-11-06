@@ -62,7 +62,7 @@ type VideoFrame struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	FrameData      []byte                 `protobuf:"bytes,1,opt,name=frame_data,json=frameData,proto3" json:"frame_data,omitempty"`                 // Данные изображения
 	Timestamp      int64                  `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`                                 // В миллисекундах
-	SequencyNumber int32                  `protobuf:"varint,3,opt,name=sequency_number,json=sequencyNumber,proto3" json:"sequency_number,omitempty"` // Номер кадра
+	SequenceNumber int32                  `protobuf:"varint,3,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"` // Номер кадра
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -111,9 +111,9 @@ func (x *VideoFrame) GetTimestamp() int64 {
 	return 0
 }
 
-func (x *VideoFrame) GetSequencyNumber() int32 {
+func (x *VideoFrame) GetSequenceNumber() int32 {
 	if x != nil {
-		return x.SequencyNumber
+		return x.SequenceNumber
 	}
 	return 0
 }
@@ -122,7 +122,7 @@ func (x *VideoFrame) GetSequencyNumber() int32 {
 type DetectionResult struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	IsDrowsy           bool                   `protobuf:"varint,1,opt,name=is_drowsy,json=isDrowsy,proto3" json:"is_drowsy,omitempty"`                                 // Сонный или нет
-	DrowsinnesScore    float32                `protobuf:"fixed32,2,opt,name=drowsinnes_score,json=drowsinnesScore,proto3" json:"drowsinnes_score,omitempty"`           // Оценка сонливости 0.0-1.0
+	DrowsinessScore    float32                `protobuf:"fixed32,2,opt,name=drowsiness_score,json=drowsinessScore,proto3" json:"drowsiness_score,omitempty"`           // Оценка сонливости 0.0-1.0
 	EyesLookingForward bool                   `protobuf:"varint,3,opt,name=eyes_looking_forward,json=eyesLookingForward,proto3" json:"eyes_looking_forward,omitempty"` // Человек смотрит прямо или нет
 	EyeDirectionScore  float32                `protobuf:"fixed32,4,opt,name=eye_direction_score,json=eyeDirectionScore,proto3" json:"eye_direction_score,omitempty"`   // Оценка направления взгляда
 	HeadAngle          float32                `protobuf:"fixed32,5,opt,name=head_angle,json=headAngle,proto3" json:"head_angle,omitempty"`                             // Угол наклона головы в градусах
@@ -172,9 +172,9 @@ func (x *DetectionResult) GetIsDrowsy() bool {
 	return false
 }
 
-func (x *DetectionResult) GetDrowsinnesScore() float32 {
+func (x *DetectionResult) GetDrowsinessScore() float32 {
 	if x != nil {
-		return x.DrowsinnesScore
+		return x.DrowsinessScore
 	}
 	return 0
 }
@@ -308,10 +308,10 @@ const file_drowsiness_proto_rawDesc = "" +
 	"\n" +
 	"frame_data\x18\x01 \x01(\fR\tframeData\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12'\n" +
-	"\x0fsequency_number\x18\x03 \x01(\x05R\x0esequencyNumber\"\x99\x03\n" +
+	"\x0fsequence_number\x18\x03 \x01(\x05R\x0esequenceNumber\"\x99\x03\n" +
 	"\x0fDetectionResult\x12\x1b\n" +
 	"\tis_drowsy\x18\x01 \x01(\bR\bisDrowsy\x12)\n" +
-	"\x10drowsinnes_score\x18\x02 \x01(\x02R\x0fdrowsinnesScore\x120\n" +
+	"\x10drowsiness_score\x18\x02 \x01(\x02R\x0fdrowsinessScore\x120\n" +
 	"\x14eyes_looking_forward\x18\x03 \x01(\bR\x12eyesLookingForward\x12.\n" +
 	"\x13eye_direction_score\x18\x04 \x01(\x02R\x11eyeDirectionScore\x12\x1d\n" +
 	"\n" +

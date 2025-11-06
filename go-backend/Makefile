@@ -1,4 +1,4 @@
-.PHONY: help install proto build run run-dev test clean
+.PHONY: install proto build run run-dev test clean
 
 BINARY_NAME := server
 PROTO_DIR := proto
@@ -23,16 +23,16 @@ proto: install
 
 build: proto
 	@echo "Sborka..."
-	go build -o $(BINARY_NAME).exe $(CMD_DIR)/server/main.go
+	go build -o $(BINARY_NAME).exe $(CMD_DIR)/main.go
 	@echo "OK: $(BINARY_NAME).exe"
 
 run: build
 	@echo "Zapusk..."
-	./$(BINARY_NAME).exe -grpc-port=50051 -python-url=localhost:50052
+	./$(BINARY_NAME).exe -grpc-port=50051 -python-url=localhost:9000
 
 run-dev:
 	@echo "Dev mode..."
-	go run $(CMD_DIR)/main.go -grpc-port=50051 -python-url=localhost:50052
+	go run $(CMD_DIR)/main.go -grpc-port=50051 -python-url=localhost:9000
 
 test:
 	@echo "Testy..."

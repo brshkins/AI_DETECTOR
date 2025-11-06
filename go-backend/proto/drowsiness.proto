@@ -20,13 +20,13 @@ message Empty {}
 message VideoFrame {
   bytes frame_data = 1; // Данные изображения
   int64 timestamp = 2; // В миллисекундах
-  int32 sequency_number = 3; // Номер кадра
+  int32 sequence_number = 3; // Номер кадра
 }
 
 // Результат детектора сонливости
 message DetectionResult {
   bool is_drowsy = 1; // Сонный или нет
-  float drowsinnes_score = 2; // Оценка сонливости 0.0-1.0
+  float drowsiness_score = 2; // Оценка сонливости 0.0-1.0
   bool eyes_looking_forward = 3; // Человек смотрит прямо или нет
   float eye_direction_score = 4; // Оценка направления взгляда
   float head_angle = 5; // Угол наклона головы в градусах

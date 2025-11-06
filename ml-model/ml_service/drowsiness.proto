@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package drowsiness;
+
+option go_package = "https://github.com/brshkins/AI_DETECTOR/go-backend/pkg/pb;pb";
+
+service DrowsinessDetection {
+  // Обработка одного кадра
+  rpc DetectDrowsiness(VideoFrame) returns (DetectionResult) {}
+
+  // Потоковая обработка
+  rpc DetectDrowsinessStream(stream VideoFrame) returns (stream DetectionResult) {}
+
+  rpc Health(Empty) returns (HealthStatus) {}
+}
+
+message Empty {}
+
+// Видео от клиента
+message VideoFrame {
+  bytes frame_data = 1; // Данные изображения
+  int64 timestamp = 2; // В миллисекундах
+  int32 sequence_number = 3; // Номер кадра
+}
+
+// Результат детектора сонливости
+message DetectionResult {
+  bool is_drowsy = 1; // Сонный или нет
+  float drowsiness_score = 2; // Оценка сонливости 0.0-1.0
+  bool eyes_looking_forward = 3; // Человек смотрит прямо или нет
+  float eye_direction_score = 4; // Оценка направления взгляда
+  float head_angle = 5; // Угол наклона головы в градусах
+  string alert_level = 6; // Состояние
+  float inference_time_ms = 7; // Время обработки
+  int64 timestamp = 8;
+  int64 client_timestamp = 9;
+  int32 sequence_number = 10;
+}
+
+// Статус сервиса
+message HealthStatus {
+  string status = 1;
+  bool grpc_service = 2;
+  int32 active_clients = 3;
+}
