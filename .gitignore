@@ -1,83 +1,143 @@
-# Python (ml-model)
+# файлы os
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+nul
 
-# Python cache
-__pycache__/
-*.py[cod]
-*.so
-*.egg-info/
-dist/
-build/
-*.egg
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
 
-# Virtual environment
-venv/
-.venv/
-env/
-ENV/
-env.bak/
-pyvenv.cfg
-
-# Python cache
-__pycache__/
-*.py[cod]
-*.so
-*.egg-info/
-dist/
-build/
-*.egg
-
-
-
-../.venv/Lib
-kaggle.json
-archive/*
-processed_dataset/*
-
-# GO (go-backend)
-
-# Бинарники
+# Go
+# бинарные файлы
 *.exe
+*.exe~
 *.dll
 *.so
 *.dylib
 *.test
 *.out
 go-backend/bin/
-go-backend/cmd/server/server
-go-backend/cmd/server/server.exe
+go-backend/server.exe
+go-backend/server
+test-client/*.exe
 
-# Go workspace
+# рабочее пространство
 go.work
-go.work.sum
 
-# Go mod
-go-backend/go.sum
+# база данных
+*.db
+*.sqlite
+*.sqlite3
+go-backend/app.db
 
-# gRPC Auto-generated
-go-backend/pkg/pb/*.pb.go
-go-backend/pkg/pb/*_grpc.pb.go
-go-backend/pkg/pb/*.pb.gw.go
-*.swagger.json
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+ml-model/ml_service/venv/
+ml-model/ml_service/__pycache__/
+ml-model/ml_service/*.pyc
+ml-model/ml_service/.pytest_cache/
+ml-model/ml_service/.mypy_cache/
 
-# Vendor
-go-backend/vendor/
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/.env.development
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*.iml
-*.sublime-workspace
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# os
-.DS_Store
-Thumbs.db
-.directory
-
-# enviroment
+# переменные окружения
 .env
 .env.local
-.env.*.local
-.env.prod
-*.env
+.env.development.local
+.env.test.local
+.env.production.local
+
+# тесты
+coverage/
+*.lcov
+.nyc_output/
+
+# временные файлы
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+
+# Model checkpoints and data
+ml-model/ml_service/checkpoints/*.pth
+ml-model/ml_service/data/
+ml-model/ml_service/datasets/
+
+# сгенерированные файлы
+*.pb.go
+*.pb.h
+*.pb.cc
+*.pb.h
+go-backend/pkg/pb/*.pb.go
+go-backend/pkg/pb/*_grpc.pb.go
+
+# сохранить прото файлы
+!go-backend/proto/*.proto
+!ml-model/ml_service/*.proto
+
+# тестовые файлы
+test-client/test_image.go
+test-client/*.exe
+
+# Build artifacts
+*.a
+*.o
+*.so
+*.dylib
+*.dll
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

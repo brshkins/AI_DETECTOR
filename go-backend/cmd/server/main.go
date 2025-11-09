@@ -2,10 +2,13 @@ package main
 
 import (
 	"AI_DETECTOR/go-backend/internal/config"
+	"AI_DETECTOR/go-backend/internal/database"
 	"AI_DETECTOR/go-backend/internal/handlers"
+	"AI_DETECTOR/go-backend/internal/models"
 	"AI_DETECTOR/go-backend/internal/services"
 	"AI_DETECTOR/go-backend/pkg/pb"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"github.com/gorilla/websocket"
@@ -22,8 +25,11 @@ import (
 )
 
 var (
-	grpcServer *grpc.Server
-	httpServer *http.Server
+	grpcServer      *grpc.Server
+	httpServer      *http.Server
+	grpcClient      *services.GRPCClient
+	appConfig       *config.Config
+	serverStartTime time.Time
 
 	wsClients = &WebSocketClients{
 		clients: make(map[string]*WebSocketClient),
@@ -50,6 +56,17 @@ type WebSocketMessage struct {
 	Timestamp int64       `json:"timestamp"`
 }
 
+func enableCORS(w http.ResponseWriter, cfg *config.Config) {
+	origin := cfg.CORSOrigins
+	if origin == "" {
+		origin = "http://localhost:5000"
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Cookie")
+}
+
 func main() {
 	httpPort := flag.String("http-port", ":8080", "HTTP port")
 	grpcPort := flag.String("grpc-port", ":50051", "gRPC port")
@@ -57,25 +74,45 @@ func main() {
 	flag.Parse()
 
 	cfg := config.LoadConfig()
+	appConfig = cfg
+	serverStartTime = time.Now()
 
 	log.Println("Starting...")
 	log.Printf("gRPC port: %s", *grpcPort)
 	log.Printf("HTTP port: %s", *httpPort)
 	log.Printf("Python service: %s", *pythonURL)
-	log.Printf("Enviroment: %s", cfg.Environment)
+	log.Printf("Environment: %s", cfg.Environment)
+
+	log.Println("Initializing database...")
+	if err := database.InitDB("./app.db"); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.CloseDB()
+	log.Println("Database initialized successfully")
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
 	// Подключение к Python
-	grpcClient, err := services.NewGRPCClient(*pythonURL)
+	var err error
+	grpcClient, err = services.NewGRPCClient(*pythonURL)
 	if err != nil {
 		log.Printf("Python service unavailable: %v", err)
 		log.Println("Continuing without Python (for testing)")
-	}
-
-	if grpcClient != nil {
-		defer grpcClient.Close()
+		grpcClient = nil
+	} else {
+		log.Printf("gRPC client created, verifying connection...")
+		if !grpcClient.HealthCheck() {
+			log.Printf("WARNING: Python service connected but health check failed - connection may be unstable")
+		} else {
+			log.Printf("Python service connected and healthy")
+		}
+		defer func() {
+			if grpcClient != nil {
+				log.Println("Closing gRPC client connection...")
+				grpcClient.Close()
+			}
+		}()
 	}
 
 	// gRPC сервер
@@ -165,6 +202,33 @@ func startHTTPServer(httpPort string) {
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", handleMetrics)
 
+	mux.HandleFunc("/api/auth/register", handlers.Register)
+	mux.HandleFunc("/api/auth/login", handlers.Login)
+	mux.HandleFunc("/api/auth/logout", handlers.Logout)
+
+	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handlers.GetSessions(w, r)
+		} else if r.Method == http.MethodPost {
+			handlers.CreateSession(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/sessions/end", handlers.EndSession)
+
+	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handlers.GetEvents(w, r)
+		} else if r.Method == http.MethodPost {
+			handlers.SaveEvent(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	log.Println("Database endpoints registered")
+
 	httpServer = &http.Server{
 		Addr:         ":" + port,
 		Handler:      mux,
@@ -187,7 +251,19 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			return true
+			if appConfig == nil {
+				return false
+			}
+			origin := r.Header.Get("Origin")
+			allowedOrigins := appConfig.CORSOrigins
+			if allowedOrigins == "" {
+				allowedOrigins = "http://localhost:5000"
+			}
+			if appConfig.IsDev() {
+				return origin == allowedOrigins || origin == "" ||
+					(origin[:7] == "http://" && (origin[7:17] == "localhost" || origin[7:9] == "127"))
+			}
+			return origin == allowedOrigins
 		},
 	}
 
@@ -299,7 +375,7 @@ func readPump(client *WebSocketClient) {
 
 // Цикл отправки в WebSocket
 func writePump(client *WebSocketClient) {
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(5 * time.Second)
 	defer func() {
 		ticker.Stop()
 		client.conn.Close()
@@ -330,9 +406,16 @@ func writePump(client *WebSocketClient) {
 
 // Обработчик REST API - Обнаружение
 func handleDetect(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	enableCORS(w, appConfig)
 
-	if r.Method != http.MethodPost && r.Method != http.MethodGet {
+	// Обработка preflight OPTIONS запросов
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent) // 204, не 200!
+		return
+	}
+
+	// Проверка метода
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Method not allowed",
@@ -340,19 +423,93 @@ func handleDetect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("/api/detect - Frame detection request")
+	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
 
+	// Парсирование запроса
+	var req models.DetectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Проверка пустого кадра
+	if req.Frame == "" {
+		http.Error(w, "Empty frame data", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Frame) > 8*1024*1024 { //
+		http.Error(w, "Frame data too large (max 8MB)", http.StatusBadRequest)
+		return
+	}
+
+	// Декодирование base64 в байты
+	frameBytes, err := base64.StdEncoding.DecodeString(req.Frame)
+	if err != nil {
+		log.Printf("Base64 decode error: %v", err)
+		http.Error(w, "Invalid frame data format", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Received frame: size=%d bytes, sequence=%d", len(frameBytes), req.SequenceNumber)
+
+	// Проверка доступности gRPC клиента
+	if grpcClient == nil {
+		log.Println("WARNING: gRPC client is nil - ML service unavailable")
+		log.Println("DEBUG: This means the connection failed at startup or was never established")
+		http.Error(w, "ML service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	if !grpcClient.HealthCheck() {
+		log.Printf("WARNING: gRPC client exists but connection is not healthy")
+		http.Error(w, "ML service connection lost", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Создание protobuf сообщения для ML сервиса
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	videoFrame := &pb.VideoFrame{
+		FrameData:      frameBytes,
+		Timestamp:      req.Timestamp,
+		SequenceNumber: req.SequenceNumber,
+	}
+
+	// Отправка на Python ML сервис через gRPC
+	result, err := grpcClient.ProcessFrame(ctx, videoFrame)
+	if err != nil {
+		log.Printf("ML processing error: %v", err)
+		http.Error(w, "Processing failed", http.StatusInternalServerError)
+		return
+	}
+
+	// Успешный ответ
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":    "ok",
-		"message":   "Frame received and processed",
-		"timestamp": time.Now().Unix(),
-	})
+	response := map[string]interface{}{
+		"is_drowsy":        result.IsDrowsy,
+		"drowsiness_score": float64(result.DrowsinessScore),
+		"alert_level":      result.AlertLevel,
+		"timestamp":        time.Now().Unix(),
+		"inference_time":   result.InferenceTimeMs,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Encode response error: %v", err)
+	}
+
+	log.Printf("Detection result: drowsy=%v, score=%.2f", result.IsDrowsy, result.DrowsinessScore)
 }
 
 // Обработчик REST API - Проверка здоровья
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	enableCORS(w, appConfig)
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -362,26 +519,23 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("/api/health - Health check")
-
-	wsClients.mu.RLock()
-	activeClients := len(wsClients.clients)
-	wsClients.mu.RUnlock()
+	grpcOk := false
+	if grpcClient != nil {
+		grpcOk = grpcClient.HealthCheck()
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":          "healthy",
-		"gRPC_status":     "running",
-		"HTTP_status":     "running",
-		"active_clients":  activeClients,
-		"total_processed": 0,
-		"total_errors":    0,
-		"timestamp":       time.Now().Format(time.RFC3339),
+		"status":    "healthy",
+		"grpc_ok":   grpcOk,
+		"http_ok":   true,
+		"timestamp": time.Now().Unix(),
 	})
 }
 
 // Обработчик REST API - Метрики
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w, appConfig)
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodGet {
@@ -406,7 +560,7 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 		"avg_latency_ms":    0,
 		"drowsy_detections": 0,
 		"detection_rate":    0.0,
-		"system_uptime_sec": int(time.Since(time.Now()).Seconds()),
+		"system_uptime_sec": int(time.Since(serverStartTime).Seconds()),
 		"timestamp":         time.Now().Format(time.RFC3339),
 	})
 }

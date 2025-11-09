@@ -27,19 +27,40 @@ func NewGRPCClient(url string) (*GRPCClient, error) {
 			grpc.MaxCallSendMsgSize(50*1024*1024),
 		),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             3 * time.Second,
-			PermitWithoutStream: true,
+			Time:                30 * time.Second,  // Increased from 10s to reduce ping frequency
+			Timeout:             10 * time.Second,  // Increased from 3s
+			PermitWithoutStream: false,             // Changed to false to reduce pings when idle
 		}),
 	}
 
-	conn, err := grpc.Dial(url, opts...)
+	// Use WithBlock to wait for connection to be ready
+	opts = append(opts, grpc.WithBlock())
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
+	conn, err := grpc.DialContext(ctx, url, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to Python gRPC server at %s: %s", url, err)
 	}
 
+	// Wait for connection to be ready
+	ctxReady, cancelReady := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelReady()
+	
+	for {
+		state := conn.GetState()
+		if state.String() == "READY" {
+			break
+		}
+		if !conn.WaitForStateChange(ctxReady, state) {
+			conn.Close()
+			return nil, fmt.Errorf("connection to %s did not become READY (state: %s)", url, state.String())
+		}
+	}
+
 	client := pb.NewDrowsinessDetectionClient(conn)
-	log.Printf("Connected to Python gRPC server at %s", url)
+	log.Printf("Connected to Python gRPC server at %s (state: %s)", url, conn.GetState().String())
 
 	return &GRPCClient{
 		conn:   conn,
@@ -49,11 +70,22 @@ func NewGRPCClient(url string) (*GRPCClient, error) {
 }
 
 func (gc *GRPCClient) ProcessFrame(ctx context.Context, frame *pb.VideoFrame) (*pb.DetectionResult, error) {
+	if gc == nil || gc.client == nil {
+		return nil, fmt.Errorf("gRPC client is not initialized")
+	}
+
+	// Check connection state before making call
+	state := gc.conn.GetState()
+	if state.String() != "READY" {
+		return nil, fmt.Errorf("gRPC connection not ready (state: %s)", state.String())
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	result, err := gc.client.DetectDrowsiness(ctx, frame)
 	if err != nil {
+		log.Printf("ProcessFrame error: %v (connection state: %s)", err, gc.conn.GetState().String())
 		return nil, fmt.Errorf("could not detect drowsiness: %w", err)
 	}
 	return result, nil
@@ -68,11 +100,26 @@ func (gc *GRPCClient) StartStream(ctx context.Context) (pb.DrowsinessDetection_D
 }
 
 func (gc *GRPCClient) HealthCheck() bool {
+	if gc == nil || gc.client == nil || gc.conn == nil {
+		return false
+	}
+
+	// Check connection state
+	state := gc.conn.GetState()
+	if state.String() != "READY" {
+		log.Printf("gRPC connection state: %s (not READY)", state.String())
+		return false
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	_, err := gc.client.Health(ctx, &pb.Empty{})
-	return err == nil
+	if err != nil {
+		log.Printf("Health check failed: %v (connection state: %s)", err, gc.conn.GetState().String())
+		return false
+	}
+	return true
 }
 
 func (gc *GRPCClient) Close() error {
