@@ -205,6 +205,7 @@ func startHTTPServer(httpPort string) {
 	mux.HandleFunc("/api/auth/register", handlers.Register)
 	mux.HandleFunc("/api/auth/login", handlers.Login)
 	mux.HandleFunc("/api/auth/logout", handlers.Logout)
+	mux.HandleFunc("/api/auth/me", handlers.GetCurrentUser)
 
 	mux.HandleFunc("/api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -216,6 +217,7 @@ func startHTTPServer(httpPort string) {
 		}
 	})
 	mux.HandleFunc("/api/sessions/end", handlers.EndSession)
+	mux.HandleFunc("/api/sessions/delete", handlers.DeleteSession)
 
 	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {

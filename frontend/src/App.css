@@ -10,7 +10,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f3f4f6;
+  background: linear-gradient(135deg, #e8f4f8 0%, #ffe5e5 50%, #fff4e6 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 .loading-screen {
@@ -22,48 +24,58 @@ body {
   color: #6b7280;
 }
 
-/* Common button styles */
 .btn {
   padding: 0.5rem 1rem;
   border: none;
-  border-radius: 4px;
+  border-radius: 12px;
   font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.3s ease;
   font-weight: 500;
 }
 
 .btn-primary {
-  background: #3b82f6;
+  background: linear-gradient(135deg, #a8d5e2 0%, #ffb3ba 100%);
   color: #fff;
+  box-shadow: 0 4px 15px rgba(168, 213, 226, 0.3);
+  border: none;
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2563eb;
+  background: linear-gradient(135deg, #8fc4d3 0%, #ff9ba3 100%);
+  box-shadow: 0 6px 20px rgba(168, 213, 226, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn-secondary {
-  background: #6b7280;
+  background: linear-gradient(135deg, #d4a5c0 0%, #c8a8d5 100%);
   color: #fff;
+  box-shadow: 0 4px 15px rgba(212, 165, 192, 0.3);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #4b5563;
+  background: linear-gradient(135deg, #c895b0 0%, #b898c5 100%);
+  box-shadow: 0 6px 20px rgba(212, 165, 192, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn-danger {
-  background: #ef4444;
+  background: linear-gradient(135deg, #ffb3ba 0%, #ffcccb 100%);
   color: #fff;
+  box-shadow: 0 4px 15px rgba(255, 179, 186, 0.3);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #dc2626;
+  background: linear-gradient(135deg, #ff9ba3 0%, #ffb3b3 100%);
+  box-shadow: 0 6px 20px rgba(255, 179, 186, 0.4);
+  transform: translateY(-2px);
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
 
 
 

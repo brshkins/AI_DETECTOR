@@ -253,6 +253,40 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Logged out"))
 }
 
+func GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, exists := getUserIDFromCookie(r)
+	if !exists {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var user models.User
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	err := database.DB.QueryRowContext(ctx,
+		"SELECT id, email, username, created_at FROM users WHERE id = ?",
+		userID,
+	).Scan(&user.ID, &user.Email, &user.Username, &user.CreatedAt)
+
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("GetCurrentUser error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
 func CreateSession(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w)
 	if r.Method != http.MethodPost {
@@ -380,6 +414,72 @@ func EndSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Session ended"))
 	log.Printf("Session ended: %d", sessionID)
+}
+
+func DeleteSession(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, exists := getUserIDFromCookie(r)
+	if !exists {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	sessionIDStr := r.URL.Query().Get("id")
+	sessionID, err := strconv.Atoi(sessionIDStr)
+	if err != nil {
+		http.Error(w, "Invalid session ID", http.StatusBadRequest)
+		return
+	}
+
+	// Сначала проверяем, что сеанс принадлежит пользователю
+	var sessionUserID int
+	err = database.DB.QueryRow(
+		"SELECT user_id FROM sessions WHERE id = ?",
+		sessionID,
+	).Scan(&sessionUserID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("Failed to verify session: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if sessionUserID != userID {
+		http.Error(w, "Unauthorized: session does not belong to user", http.StatusForbidden)
+		return
+	}
+
+	// Удаляем события сеанса
+	_, err = database.DB.Exec("DELETE FROM events WHERE session_id = ?", sessionID)
+	if err != nil {
+		log.Printf("Failed to delete events: %v", err)
+		// Продолжаем удаление сеанса даже если не удалось удалить события
+	}
+
+	// Удаляем сеанс
+	result, err := database.DB.Exec("DELETE FROM sessions WHERE id = ? AND user_id = ?", sessionID, userID)
+	if err != nil {
+		log.Printf("Failed to delete session: %v", err)
+		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Session deleted"))
+	log.Printf("Session deleted: %d", sessionID)
 }
 
 func SaveEvent(w http.ResponseWriter, r *http.Request) {

@@ -24,7 +24,7 @@ export const Navbar: React.FC = () => {
     <nav className="navbar">
       <div className="navbar-content">
         <div className="navbar-brand">
-          <h2>Детектор сонливости</h2>
+          <h2>🌠 Детектор сонливости</h2>
         </div>
         <div className="navbar-user">
           <span className="user-info">
@@ -38,6 +38,8 @@ export const Navbar: React.FC = () => {
     </nav>
   );
 };
+
+
 
 
 

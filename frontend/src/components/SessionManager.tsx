@@ -31,7 +31,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       const data = await sessionsAPI.getSessions();
       setSessions(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sessions');
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить сеансы');
       setSessions([]);
     } finally {
       setLoading(false);
@@ -53,7 +53,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       onSessionSelect?.(newSession.id);
       onSessionCreated?.(newSession.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create session');
+      setError(err instanceof Error ? err.message : 'Не удалось создать сеанс');
     }
   };
 
@@ -72,7 +72,26 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         await loadSessions();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to end session');
+      setError(err instanceof Error ? err.message : 'Не удалось завершить сеанс');
+    }
+  };
+
+  const handleDeleteSession = async (sessionId: number) => {
+    if (!confirm('Вы уверены, что хотите удалить этот сеанс? Это действие нельзя отменить.')) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await sessionsAPI.deleteSession(sessionId);
+      await loadSessions();
+      setSessions(sessions.filter(session => session.id !== sessionId));
+      if (currentSessionId === sessionId && onSessionSelect) {
+        onSessionSelect(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить сеанс');
+      await loadSessions();
     }
   };
 
@@ -93,7 +112,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   return (
     <div className="session-manager">
       <div className="session-header">
-        <h2>Сеансы</h2>
+        <h2>Поездки</h2>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
           className="btn btn-primary"
@@ -105,12 +124,12 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
       {showCreateForm && (
         <form onSubmit={handleCreateSession} className="session-form">
           <div className="form-group">
-            <label htmlFor="notes">Запись (необязательно):</label>
+            <label htmlFor="notes">Название (необязательно):</label>
             <textarea
               id="notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Добавьте записи о вашем сеансе..."
+              placeholder="Добавьте информацию о вашей поездке..."
               rows={3}
             />
           </div>
@@ -131,8 +150,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
         <div className="loading">Загрузка сеанса...</div>
       ) : !sessions || sessions.length === 0 ? (
         <div className="empty-state">
-          <p>Сеансов пока нет.</p>
-          <p>Создайте первый сеанс, чтобы начать отслеживание.</p>
+          <p>Поездок пока нет.</p>
+          <p>Создайте первую поездку, чтобы начать отслеживание.</p>
         </div>
       ) : (
         <div className="session-list">
@@ -144,7 +163,9 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
               }`}
             >
               <div className="session-info">
-                <div className="session-id">Сеанс №{session.id}</div>
+                <div className="session-id">
+                  {session.notes || `Сеанс №${session.id}`}
+                </div>
                 <div className="session-time">
                   Начало: {formatDate(session.start_time)}
                 </div>
@@ -156,24 +177,23 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                 <div className="session-duration">
                   Время поездки: {getDuration(session.start_time, session.end_time)}
                 </div>
-                {session.notes && (
-                  <div className="session-notes">{session.notes}</div>
-                )}
                 <div className="session-status">
                   <span className={`status-badge ${session.status}`}>
-                    {session.status}
+                    {session.status === 'completed' || session.status === 'завершен' ? 'завершен' : session.status}
                   </span>
                 </div>
               </div>
               <div className="session-actions">
                 {session.status === 'active' && (
                   <>
-                    <button
-                      onClick={() => onSessionSelect?.(session.id)}
-                      className="btn btn-secondary btn-sm"
-                    >
-                      Выбрать
-                    </button>
+                    {currentSessionId !== session.id && (
+                      <button
+                        onClick={() => onSessionSelect?.(session.id)}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        Выбрать
+                      </button>
+                    )}
                     <button
                       onClick={() => handleEndSession(session.id)}
                       className="btn btn-danger btn-sm"
@@ -182,13 +202,22 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                     </button>
                   </>
                 )}
-                {session.status === 'completed' && (
-                  <button
-                    onClick={() => onViewSession?.(session.id)}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Смотреть
-                  </button>
+                {(session.status === 'completed' || session.status === 'завершен') && (
+                  <>
+                    <button
+                      onClick={() => onViewSession?.(session.id)}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Смотреть
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSession(session.id)}
+                      className="btn btn-danger btn-sm"
+                      title="Удалить сеанс"
+                    >
+                      🗑️
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -23,7 +23,7 @@
 
 .error-message {
   background: #fee2e2;
-  color: #991b1b;
+  color: #B54562FF;
   padding: 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
@@ -37,7 +37,7 @@
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #991b1b;
+  color: #B54562FF;
   padding: 0;
   width: 24px;
   height: 24px;
@@ -82,11 +82,11 @@
 }
 
 .stat-value.drowsy {
-  color: #ef4444;
+  color: #B54562FF;
 }
 
 .stat-value.alert {
-  color: #10b981;
+  color: ##71cdb2;
 }
 
 .event-filters {
@@ -141,12 +141,12 @@
 }
 
 .event-item.drowsy {
-  border-left: 4px solid #ef4444;
+  border-left: 4px solid #B54562FF;
   background: #fef2f2;
 }
 
 .event-item.alert {
-  border-left: 4px solid #10b981;
+  border-left: 4px solid #71cdb2;
   background: #f0fdf4;
 }
 
@@ -201,6 +201,8 @@
   height: 3px;
   transition: width 0.3s ease;
 }
+
+
 
 
 

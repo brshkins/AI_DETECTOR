@@ -151,7 +151,7 @@ class DrowsinessDetectionService(DrowsinessDetectionServicer):
             )
 
     def DetectDrowsinessStream(self, request_iterator, context):
-        """Потоковая обработка видео кадров"""
+        #Потоковая обработка видео кадров
         print("[STREAM] Stream started")
 
         for request in request_iterator:

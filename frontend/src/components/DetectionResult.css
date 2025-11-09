@@ -63,7 +63,7 @@
 }
 
 .detection-value.drowsy {
-  color: #ef4444;
+  color: #B54562FF;
 }
 
 .detection-value.alert {
@@ -100,6 +100,8 @@
   transition: width 0.3s ease;
   border-radius: 6px;
 }
+
+
 
 
 

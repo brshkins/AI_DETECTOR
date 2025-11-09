@@ -4,6 +4,7 @@ import { CameraFeed, type CameraFeedRef } from '../components/CameraFeed';
 import { DetectionResult } from '../components/DetectionResult';
 import { SessionManager } from '../components/SessionManager';
 import { Navbar } from '../components/Navbar';
+import { DecorativeElements } from '../components/DecorativeElements';
 import { eventsAPI, sessionsAPI } from '../services/api';
 import type { DetectionResult as DetectionResultType } from '../types';
 import './HomePage.css';
@@ -35,7 +36,7 @@ export const HomePage: React.FC = () => {
       setDetectionResult(null);
 
     } catch (error) {
-      console.error('Failed to end session:', error);
+      console.error('Не удалось завершить сеанс:', error);
     }
   };
 
@@ -57,13 +58,14 @@ export const HomePage: React.FC = () => {
           is_drowsy: result.is_drowsy,
         });
       } catch (error) {
-        console.error('Failed to save event:', error);
+        console.error('Не удалось сохранить событие:', error);
       }
     }
   };
 
   return (
     <div className="home-page">
+      <DecorativeElements />
       <Navbar />
       <div className="page-header">
         <h1>Детектор сонливости</h1>

@@ -30,7 +30,7 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
       const data = await eventsAPI.getEvents(sessionId);
       setEvents(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load events');
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить события');
       setEvents([]); // Set empty array on error
     } finally {
       setLoading(false);
@@ -92,9 +92,9 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 0.7) return '#ef4444';
-    if (score >= 0.4) return '#f59e0b';
-    return '#10b981';
+    if (score >= 0.7) return '#b54562';
+    if (score >= 0.4) return '#e8aa67';
+    return '#71cdb2';
   };
 
   const safeEvents = events || [];
@@ -197,7 +197,7 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
                     className={`event-item ${event.is_drowsy ? 'сонливость' : 'бодровствование'}`}
                   >
                     <div className="event-icon">
-                      {event.is_drowsy ? '⚠️' : '✅'}
+                      {event.is_drowsy ? '✴️' : '✳️'}
                     </div>
                     <div className="event-content">
                       <div className="event-header-row">

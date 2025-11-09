@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { sessionsAPI, eventsAPI } from '../services/api';
 import type { Session, Event } from '../types';
 import { Navbar } from '../components/Navbar';
+import { DecorativeElements } from '../components/DecorativeElements';
 import './SessionDetailsPage.css';
 
 export const SessionDetailsPage: React.FC = () => {
@@ -169,17 +170,18 @@ export const SessionDetailsPage: React.FC = () => {
 
   return (
     <div className="session-details-page">
+      <DecorativeElements />
       <Navbar />
       <div className="session-details-container">
         <div className="session-details-header">
           <button onClick={() => navigate('/')} className="btn btn-secondary">
             ← Назад
           </button>
-          <h1>Детали сеанса #{session.id}</h1>
+          <h1>{session.notes || `Детали сеанса #${session.id}`}</h1>
         </div>
 
         <div className="session-info-card">
-          <h2>Информация о сеансе</h2>
+          <h2>Информация о поездке</h2>
           <div className="session-info-grid">
             <div className="info-item">
               <span className="info-label">Начало:</span>
@@ -197,14 +199,10 @@ export const SessionDetailsPage: React.FC = () => {
             </div>
             <div className="info-item">
               <span className="info-label">Статус:</span>
-              <span className={`status-badge ${session.status}`}>{session.status}</span>
+              <span className={`status-badge ${session.status}`}>
+                {session.status === 'completed' || session.status === 'завершен' ? 'завершен' : session.status}
+              </span>
             </div>
-            {session.notes && (
-              <div className="info-item full-width">
-                <span className="info-label">Заметки:</span>
-                <span className="info-value">{session.notes}</span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -212,7 +210,7 @@ export const SessionDetailsPage: React.FC = () => {
           <h2>Статистика</h2>
           <div className="stats-grid">
             <div className="stat-item">
-              <span className="stat-label">Всего записей</span>
+              <span className="stat-label">Всего детекций</span>
               <span className="stat-value">{stats.total}</span>
             </div>
             <div className="stat-item">
@@ -238,7 +236,7 @@ export const SessionDetailsPage: React.FC = () => {
 
         <div className="event-history-card">
           <div className="event-history-header">
-            <h2>История поездки</h2>
+            <h2>Поездка</h2>
             <div className="event-filters">
               <button
                 onClick={() => setFilter('all')}
@@ -278,12 +276,12 @@ export const SessionDetailsPage: React.FC = () => {
                     className={`event-item ${event.is_drowsy ? 'drowsy' : 'alert'}`}
                   >
                     <div className="event-icon">
-                      {event.is_drowsy ? '⚠️' : '✅'}
+                      {event.is_drowsy ? '✴️' : '✳️'}
                     </div>
                     <div className="event-content">
                       <div className="event-header-row">
                         <span className="event-status">
-                          {event.is_drowsy ? 'Сонливость обнаружена' : 'Бодрствование'}
+                          {event.is_drowsy ? 'Сонливость' : 'Бодрствование'}
                         </span>
                         <span className="event-time">{formatDate(event.timestamp)}</span>
                       </div>
@@ -295,11 +293,6 @@ export const SessionDetailsPage: React.FC = () => {
                         >
                           {(avgScore * 100).toFixed(1)}%
                         </span>
-                        {event.count && event.count > 1 && (
-                          <span className="event-count">
-                            ({event.count} записей, {durationMinutes}м {durationSeconds}с)
-                          </span>
-                        )}
                       </div>
                     </div>
                     <div

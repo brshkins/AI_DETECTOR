@@ -1,8 +1,11 @@
 .navbar {
-  background: #fff;
-  border-bottom: 2px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 2px solid rgba(168, 213, 226, 0.3);
   padding: 1rem 2rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(168, 213, 226, 0.15);
+  position: relative;
+  z-index: 10;
 }
 
 .navbar-content {
@@ -31,6 +34,7 @@
   color: #6b7280;
   font-weight: 500;
 }
+
 
 
 

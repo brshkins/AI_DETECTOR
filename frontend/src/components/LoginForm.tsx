@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { DecorativeElements } from './DecorativeElements';
 import './LoginForm.css';
 
 export const LoginForm: React.FC = () => {
@@ -13,7 +14,6 @@ export const LoginForm: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       navigate('/');
@@ -36,16 +36,15 @@ export const LoginForm: React.FC = () => {
         }
         await register(email, username, password);
       }
-      // State will be updated, useEffect will handle navigation
-      // Don't set loading to false here as navigation will unmount the component
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      setError(err instanceof Error ? err.message : 'Ошибка аутентификации');
       setLoading(false);
     }
   };
 
   return (
     <div className="login-container">
+      <DecorativeElements />
       <div className="login-card">
         <h2>{isLogin ? 'Вход' : 'Регистрация'}</h2>
         <form onSubmit={handleSubmit}>
@@ -92,7 +91,7 @@ export const LoginForm: React.FC = () => {
           </div>
           {error && <div className="error-message">{error}</div>}
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Processing...' : isLogin ? 'Вход' : 'Регистрация'}
+            {loading ? 'Обработка...' : isLogin ? 'Вход' : 'Регистрация'}
           </button>
         </form>
         <div className="form-footer">

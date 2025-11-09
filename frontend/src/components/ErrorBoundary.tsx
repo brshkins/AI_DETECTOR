@@ -32,8 +32,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div style={{ padding: '20px', textAlign: 'center' }}>
-          <h2>Something went wrong</h2>
-          <p>{this.state.error?.message || 'An unexpected error occurred'}</p>
+          <h2>Что-то пошло не так</h2>
+          <p>{this.state.error?.message || 'Произошла неожиданная ошибка'}</p>
           <button
             onClick={() => {
               this.setState({ hasError: false, error: null });
@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
               cursor: 'pointer',
             }}
           >
-            Reload Page
+            Перезагрузить страницу
           </button>
         </div>
       );

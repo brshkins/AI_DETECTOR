@@ -26,16 +26,16 @@ const getErrorMessage = (error: unknown): string => {
           return obj.message;
         }
       }
-      return axiosError.response.statusText || 'Request failed';
+      return axiosError.response.statusText || 'Запрос не выполнен';
     }
     if (axiosError.request) {
-      return 'Network error: Could not connect to server';
+      return 'Ошибка сети: Не удалось подключиться к серверу';
     }
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return 'An unexpected error occurred';
+  return 'Произошла неожиданная ошибка';
 };
 
 export const authAPI = {
@@ -51,6 +51,15 @@ export const authAPI = {
   register: async (email: string, username: string, password: string): Promise<User> => {
     try {
       const response = await api.post<User>('/auth/register', { email, username, password });
+      return response.data;
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  getCurrentUser: async (): Promise<User> => {
+    try {
+      const response = await api.get<User>('/auth/me');
       return response.data;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -89,7 +98,6 @@ export const sessionsAPI = {
   getSessions: async (): Promise<Session[]> => {
     try {
       const response = await api.get<Session[]>('/sessions');
-      // Ensure we always return an array, never null
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -108,6 +116,14 @@ export const sessionsAPI = {
   endSession: async (sessionId: number): Promise<void> => {
     try {
       await api.post(`/sessions/end?id=${sessionId}`);
+    } catch (error) {
+      throw new Error(getErrorMessage(error));
+    }
+  },
+
+  deleteSession: async (sessionId: number): Promise<void> => {
+    try {
+      await api.post(`/sessions/delete?id=${sessionId}`);
     } catch (error) {
       throw new Error(getErrorMessage(error));
     }
@@ -145,6 +161,5 @@ export const healthAPI = {
   },
 };
 
-export default api;
 
 

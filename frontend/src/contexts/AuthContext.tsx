@@ -21,9 +21,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const verifySession = async () => {
       try {
-        await sessionsAPI.getSessions();
-        setSessionVerified(true);
+        const userData = await authAPI.getCurrentUser();
+        if (userData && userData.id) {
+          setUser(userData);
+          setSessionVerified(true);
+        } else {
+          setUser(null);
+          setSessionVerified(false);
+        }
       } catch (error) {
+        console.log('Session verification:', error);
         setUser(null);
         setSessionVerified(false);
       } finally {

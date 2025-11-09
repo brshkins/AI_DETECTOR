@@ -38,7 +38,7 @@
   top: 0;
   left: 0;
   right: 0;
-  background: rgba(220, 38, 38, 0.9);
+  background: rgb(181, 69, 98);
   color: #fff;
   padding: 1rem;
   text-align: center;
@@ -78,12 +78,12 @@
 }
 
 .btn-danger {
-  background: #ef4444;
+  background: #B54562FF;
   color: #fff;
 }
 
 .btn-danger:hover {
-  background: #dc2626;
+  background: #B54562FF;
 }
 
 .btn-secondary {
@@ -94,6 +94,8 @@
 .btn-secondary:hover {
   background: #4b5563;
 }
+
+
 
 
 

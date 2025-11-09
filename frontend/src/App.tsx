@@ -11,7 +11,7 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return <div className="loading-screen">Loading...</div>;
+    return <div className="loading-screen">Загрузка...</div>;
   }
 
   if (!isAuthenticated) {

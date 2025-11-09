@@ -57,7 +57,7 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(({
         setError(null);
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to access camera';
+      const errorMessage = err instanceof Error ? err.message : 'Не удалось получить доступ к камере';
       setError(errorMessage);
       onError?.(errorMessage);
     }
