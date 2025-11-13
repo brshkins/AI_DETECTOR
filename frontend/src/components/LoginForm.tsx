@@ -50,7 +50,7 @@ export const LoginForm: React.FC = () => {
         <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div className="form-group">
-              <label htmlFor="username">Username</label>
+              <label htmlFor="username">Имя пользователя</label>
               <input
                 id="username"
                 type="text"
