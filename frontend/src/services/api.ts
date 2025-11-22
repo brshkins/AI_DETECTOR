@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import type { User, Session, Event, DetectionResult, CreateSessionRequest, CreateEventRequest } from '../types';
+import type { User, Session, Event, CreateSessionRequest, CreateEventRequest } from '../types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -71,25 +71,6 @@ export const authAPI = {
       await api.post('/auth/logout');
     } catch (error) {
       console.error('Logout API error:', error);
-    }
-  },
-};
-
-export const detectionAPI = {
-  detect: async (
-    frame: string,
-    timestamp: number,
-    sequenceNumber: number
-  ): Promise<DetectionResult> => {
-    try {
-      const response = await api.post<DetectionResult>('/detect', {
-        frame,
-        timestamp,
-        sequence_number: sequenceNumber,
-      });
-      return response.data;
-    } catch (error) {
-      throw new Error(getErrorMessage(error));
     }
   },
 };

@@ -61,7 +61,7 @@ func validateUsername(username string) bool {
 	return usernameRegex.MatchString(username)
 }
 
-func getUserIDFromCookie(r *http.Request) (int, bool) {
+func GetUserIDFromCookie(r *http.Request) (int, bool) {
 	cookie, err := r.Cookie("session_id")
 	if err != nil {
 		return 0, false
@@ -118,24 +118,24 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := database.DB.Exec(
-		"INSERT INTO users (email, username,  password_hash) VALUES (?, ?, ?)",
+	var userID int64
+	err = database.DB.QueryRow(
+		"INSERT INTO users (email, username,  password_hash) VALUES ($1, $2, $3) RETURNING id",
 		req.Email, req.Username, passwordHash,
-	)
+	).Scan(&userID)
+
 	if err != nil {
 		log.Printf("Registration failed: %v", err)
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "UNIQUE constraint failed: users.username") {
+		if strings.Contains(errMsg, "duplicate key value") && strings.Contains(errMsg, "username") {
 			http.Error(w, "Username already taken", http.StatusConflict)
-		} else if strings.Contains(errMsg, "UNIQUE constraint failed: users.email") {
+		} else if strings.Contains(errMsg, "duplicate key value") && strings.Contains(errMsg, "email") {
 			http.Error(w, "Email already registered", http.StatusConflict)
 		} else {
 			http.Error(w, "User already exists", http.StatusConflict)
 		}
 		return
 	}
-
-	userID, _ := result.LastInsertId()
 
 	user := models.User{
 		ID:        int(userID),
@@ -178,7 +178,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	err := database.DB.QueryRowContext(ctx,
-		"SELECT id, email, username, password_hash, created_at FROM users WHERE email = ?",
+		"SELECT id, email, username, password_hash, created_at FROM users WHERE email = $1",
 		req.Email,
 	).Scan(&user.ID, &user.Email, &user.Username, &storedHash, &user.CreatedAt)
 
@@ -260,7 +260,7 @@ func GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -270,7 +270,7 @@ func GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	err := database.DB.QueryRowContext(ctx,
-		"SELECT id, email, username, created_at FROM users WHERE id = ?",
+		"SELECT id, email, username, created_at FROM users WHERE id = $1",
 		userID,
 	).Scan(&user.ID, &user.Email, &user.Username, &user.CreatedAt)
 
@@ -294,7 +294,7 @@ func CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -306,17 +306,17 @@ func CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := database.DB.Exec(
-		"INSERT INTO sessions (user_id, notes) VALUES (?, ?)",
+	var sessionID int64
+	err := database.DB.QueryRow(
+		"INSERT INTO sessions (user_id, notes) VALUES ($1, $2) RETURNING id",
 		userID, req.Notes,
-	)
+	).Scan(&sessionID)
+
 	if err != nil {
 		log.Printf("CreateSession error: %v", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
-
-	sessionID, _ := result.LastInsertId()
 
 	session := models.Session{
 		ID:        int(sessionID),
@@ -339,14 +339,14 @@ func GetSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	rows, err := database.DB.Query(
-		"SELECT id, user_id, start_time, end_time, status, notes FROM sessions WHERE user_id = ? ORDER BY start_time DESC",
+		"SELECT id, user_id, start_time, end_time, status, notes FROM sessions WHERE user_id = $1 ORDER BY start_time DESC",
 		userID,
 	)
 
@@ -382,7 +382,7 @@ func EndSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -396,7 +396,7 @@ func EndSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := database.DB.Exec(
-		"UPDATE sessions SET end_time = ?, status = 'completed' WHERE id = ? AND user_id = ?",
+		"UPDATE sessions SET end_time = $1, status = 'completed' WHERE id = $2 AND user_id = $3",
 		time.Now(), sessionID, userID,
 	)
 	if err != nil {
@@ -423,7 +423,7 @@ func DeleteSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -439,7 +439,7 @@ func DeleteSession(w http.ResponseWriter, r *http.Request) {
 	// Сначала проверяем, что сеанс принадлежит пользователю
 	var sessionUserID int
 	err = database.DB.QueryRow(
-		"SELECT user_id FROM sessions WHERE id = ?",
+		"SELECT user_id FROM sessions WHERE id = $1",
 		sessionID,
 	).Scan(&sessionUserID)
 	if err == sql.ErrNoRows {
@@ -457,14 +457,14 @@ func DeleteSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Удаляем события сеанса
-	_, err = database.DB.Exec("DELETE FROM events WHERE session_id = ?", sessionID)
+	_, err = database.DB.Exec("DELETE FROM events WHERE session_id = $1", sessionID)
 	if err != nil {
 		log.Printf("Failed to delete events: %v", err)
 		// Продолжаем удаление сеанса даже если не удалось удалить события
 	}
 
 	// Удаляем сеанс
-	result, err := database.DB.Exec("DELETE FROM sessions WHERE id = ? AND user_id = ?", sessionID, userID)
+	result, err := database.DB.Exec("DELETE FROM sessions WHERE id = $1 AND user_id = $2", sessionID, userID)
 	if err != nil {
 		log.Printf("Failed to delete session: %v", err)
 		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
@@ -489,7 +489,7 @@ func SaveEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -505,7 +505,7 @@ func SaveEvent(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	var sessionUserID int
 	err := database.DB.QueryRowContext(ctx,
-		"SELECT user_id FROM sessions WHERE id = ?",
+		"SELECT user_id FROM sessions WHERE id = $1",
 		req.SessionID,
 	).Scan(&sessionUserID)
 	if err == sql.ErrNoRows {
@@ -526,18 +526,17 @@ func SaveEvent(w http.ResponseWriter, r *http.Request) {
 		isDrowsyInt = 1
 	}
 
-	result, err := database.DB.Exec(
-		"INSERT INTO events (session_id, drowsiness_score, is_drowsy) VALUES (?, ?, ?)",
+	var eventID int64
+	err = database.DB.QueryRow(
+		"INSERT INTO events (session_id, drowsiness_score, is_drowsy) VALUES ($1, $2, $3) RETURNING id",
 		req.SessionID, req.DrowsinessScore, isDrowsyInt,
-	)
+	).Scan(&eventID)
 
 	if err != nil {
 		log.Printf("Failed to save event: %v", err)
 		http.Error(w, "Failed to save event", http.StatusInternalServerError)
 		return
 	}
-
-	eventID, _ := result.LastInsertId()
 
 	event := models.Event{
 		ID:              int(eventID),
@@ -559,7 +558,7 @@ func GetEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, exists := getUserIDFromCookie(r)
+	userID, exists := GetUserIDFromCookie(r)
 	if !exists {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -576,7 +575,7 @@ func GetEvents(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	var sessionUserID int
 	err = database.DB.QueryRowContext(ctx,
-		"SELECT user_id FROM sessions WHERE id = ?",
+		"SELECT user_id FROM sessions WHERE id = $1",
 		sessionID,
 	).Scan(&sessionUserID)
 	if err == sql.ErrNoRows {
@@ -593,7 +592,7 @@ func GetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := database.DB.Query(
-		"SELECT id, session_id, drowsiness_score, is_drowsy, timestamp FROM events WHERE session_id = ? ORDER BY timestamp DESC",
+		"SELECT id, session_id, drowsiness_score, is_drowsy, timestamp FROM events WHERE session_id = $1 ORDER BY timestamp DESC",
 		sessionID,
 	)
 

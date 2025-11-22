@@ -16,8 +16,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -41,6 +43,7 @@ type WebSocketClient struct {
 	clientID string
 	send     chan interface{}
 	mu       sync.Mutex
+	closed   int32 // Атомарный флаг для отслеживания закрытия
 }
 
 type WebSocketClients struct {
@@ -56,15 +59,95 @@ type WebSocketMessage struct {
 	Timestamp int64       `json:"timestamp"`
 }
 
-func enableCORS(w http.ResponseWriter, cfg *config.Config) {
-	origin := cfg.CORSOrigins
-	if origin == "" {
-		origin = "http://localhost:5000"
-	}
+func enableCORS(w http.ResponseWriter, r *http.Request, cfg *config.Config) {
+	origin := determineAllowOrigin(r.Header.Get("Origin"))
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Cookie")
+}
+
+func getAllowedOrigins() []string {
+	if appConfig == nil || strings.TrimSpace(appConfig.CORSOrigins) == "" {
+		return []string{"http://localhost:5000"}
+	}
+
+	raw := strings.Split(appConfig.CORSOrigins, ",")
+	origins := make([]string, 0, len(raw))
+	for _, origin := range raw {
+		o := strings.TrimSpace(origin)
+		if o == "" {
+			continue
+		}
+		origins = append(origins, o)
+	}
+
+	if len(origins) == 0 {
+		return []string{"http://localhost:5000"}
+	}
+
+	return origins
+}
+
+func isLocalOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1"
+}
+
+func isOriginAllowed(origin string) bool {
+	if appConfig == nil {
+		return false
+	}
+
+	if origin == "" {
+		return appConfig.IsDev()
+	}
+
+	for _, allowed := range getAllowedOrigins() {
+		if allowed == "*" {
+			return true
+		}
+
+		if origin == allowed {
+			return true
+		}
+
+		if strings.Contains(allowed, "localhost") || strings.Contains(allowed, "127.0.0.1") {
+			if isLocalOrigin(origin) {
+				return true
+			}
+		}
+	}
+
+	if appConfig.IsDev() && isLocalOrigin(origin) {
+		return true
+	}
+
+	return false
+}
+
+func determineAllowOrigin(requestOrigin string) string {
+	if isOriginAllowed(requestOrigin) {
+		return requestOrigin
+	}
+
+	origins := getAllowedOrigins()
+	if len(origins) == 0 {
+		return "*"
+	}
+
+	if origins[0] == "*" {
+		return "*"
+	}
+
+	return origins[0]
 }
 
 func main() {
@@ -84,7 +167,7 @@ func main() {
 	log.Printf("Environment: %s", cfg.Environment)
 
 	log.Println("Initializing database...")
-	if err := database.InitDB("./app.db"); err != nil {
+	if err := database.InitDB(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.CloseDB()
@@ -198,7 +281,7 @@ func startHTTPServer(httpPort string) {
 
 	mux.HandleFunc("/ws", handleWebSocket)
 
-	mux.HandleFunc("/api/detect", handleDetect)
+	// mux.HandleFunc("/api/detect", handleDetect)
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", handleMetrics)
 
@@ -249,23 +332,24 @@ func startHTTPServer(httpPort string) {
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	log.Printf("WebSocket connection attempt from %s, Origin: %s", r.RemoteAddr, r.Header.Get("Origin"))
+	
+	userID, exists := handlers.GetUserIDFromCookie(r)
+	if !exists {
+		log.Printf("WebSocket connection rejected: user not authenticated (no session_id cookie)")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	log.Printf("WebSocket connection authenticated for user ID: %d", userID)
+
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			if appConfig == nil {
-				return false
-			}
 			origin := r.Header.Get("Origin")
-			allowedOrigins := appConfig.CORSOrigins
-			if allowedOrigins == "" {
-				allowedOrigins = "http://localhost:5000"
-			}
-			if appConfig.IsDev() {
-				return origin == allowedOrigins || origin == "" ||
-					(origin[:7] == "http://" && (origin[7:17] == "localhost" || origin[7:9] == "127"))
-			}
-			return origin == allowedOrigins
+			allowed := isOriginAllowed(origin)
+			log.Printf("WebSocket Origin check: %s -> %v", origin, allowed)
+			return allowed
 		},
 	}
 
@@ -274,6 +358,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		log.Printf("websocket upgrade failed: %v", err)
 		return
 	}
+	log.Printf("WebSocket upgrade successful")
 
 	clientID := r.URL.Query().Get("clientId")
 	if clientID == "" {
@@ -310,7 +395,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go readPump(client)
 	go writePump(client)
 
-	// Отправляем приветственное сообщение
+	// Отправляем приветственное сообщение через горутину с задержкой
+	// чтобы убедиться, что writePump запустился
 	welcomeMsg := WebSocketMessage{
 		Type:      "WELCOME",
 		ClientID:  clientID,
@@ -321,20 +407,38 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	client.send <- welcomeMsg
+	go func() {
+		time.Sleep(200 * time.Millisecond) // Даем время writePump запуститься
+		select {
+		case client.send <- welcomeMsg:
+			log.Printf("WELCOME message queued for client %s", clientID)
+		case <-time.After(1 * time.Second):
+			log.Printf("WARNING: Failed to send WELCOME message to client %s (channel full or closed)", clientID)
+		}
+	}()
+
+	// Ждем завершения readPump (когда соединение закроется)
+	// writePump также завершится при закрытии соединения
+	// defer закроет соединение и удалит клиента
+	select {} // Блокируем навсегда, defer закроет соединение когда readPump завершится
 }
 
 // Цикл чтения из WebSocket
 func readPump(client *WebSocketClient) {
 	defer func() {
-		client.conn.Close()
+		log.Printf("readPump exiting for client %s", client.clientID)
+		// Не закрываем соединение здесь - оно уже закрыто или будет закрыто в defer handleWebSocket
 	}()
 
-	client.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	// Увеличиваем таймаут чтения до 70 секунд (больше чем интервал PING 54 секунды)
+	client.conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 	client.conn.SetPongHandler(func(string) error {
-		client.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		log.Printf("Received PONG from client %s", client.clientID)
+		client.conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 		return nil
 	})
+
+	log.Printf("readPump started for client %s, waiting for messages...", client.clientID)
 
 	for {
 		var msg WebSocketMessage
@@ -342,6 +446,10 @@ func readPump(client *WebSocketClient) {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket error for %s: %v", client.clientID, err)
+			} else if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				log.Printf("WebSocket closed normally for %s: %v", client.clientID, err)
+			} else {
+				log.Printf("WebSocket read error for %s: %v (type: %T)", client.clientID, err, err)
 			}
 			break
 		}
@@ -358,16 +466,100 @@ func readPump(client *WebSocketClient) {
 			}
 
 		case "FRAME":
-			// Обработка видео кадра
-			response := WebSocketMessage{
-				Type:      "FRAME_RECEIVED",
+			payloadBytes, err := json.Marshal(msg.Payload)
+			if err != nil {
+				log.Printf("Failed to marshal payload: %v", err)
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "Invalid payload format",
+					},
+				}
+				continue
+			}
+
+			var frameData models.WSFrameMessage
+			if err := json.Unmarshal(payloadBytes, &frameData); err != nil {
+				log.Printf("Invalid frame data format: %v", err)
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "Invalid frame data format",
+					},
+				}
+				continue
+			}
+
+			frameBytes, err := base64.StdEncoding.DecodeString(frameData.Frame)
+			if err != nil {
+				log.Printf("Base64 decode error: %v", err)
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "Invalid base64",
+					},
+				}
+				continue
+			}
+
+			if len(frameBytes) == 0 {
+				log.Printf("Empty frame data from client %s", client.clientID)
+				continue
+			}
+
+			videoFrame := &pb.VideoFrame{
+				FrameData:      frameBytes,
+				Timestamp:      frameData.Timestamp,
+				SequenceNumber: frameData.SequenceNumber,
+			}
+
+			if grpcClient == nil {
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "ML service unavailable",
+					},
+				}
+				continue
+			}
+
+			if !grpcClient.HealthCheck() {
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "ML service disconnected",
+					},
+				}
+				continue
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			result, err := grpcClient.ProcessFrame(ctx, videoFrame)
+			cancel()
+
+			if err != nil {
+				log.Printf("gRPC error: %v", err)
+				client.send <- WebSocketMessage{
+					Type: "ERROR",
+					Payload: map[string]interface{}{
+						"message": "Processing failed",
+					},
+				}
+				continue
+			}
+			resp := WebSocketMessage{
+				Type:      "DETECTION_RESULT",
 				ClientID:  client.clientID,
 				Timestamp: time.Now().Unix(),
 				Payload: map[string]interface{}{
-					"status": "processed",
+					"is_drowsy":        result.IsDrowsy,
+					"drowsiness_score": result.DrowsinessScore,
+					"alert_level":      result.AlertLevel,
+					"inference_time":   result.InferenceTimeMs,
+					"sequence_number":  frameData.SequenceNumber,
 				},
 			}
-			client.send <- response
+			client.send <- resp
 
 		default:
 			log.Printf("Unknown message type: %s", msg.Type)
@@ -377,11 +569,14 @@ func readPump(client *WebSocketClient) {
 
 // Цикл отправки в WebSocket
 func writePump(client *WebSocketClient) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(54 * time.Second) // Отправляем PING каждые 54 секунды (меньше чем read deadline 60 сек)
 	defer func() {
+		log.Printf("writePump exiting for client %s", client.clientID)
 		ticker.Stop()
-		client.conn.Close()
+		// Не закрываем соединение здесь - оно будет закрыто в defer handleWebSocket
 	}()
+
+	log.Printf("writePump started for client %s, ready to send messages...", client.clientID)
 
 	for {
 		select {
@@ -389,124 +584,40 @@ func writePump(client *WebSocketClient) {
 			client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 
 			if !ok {
+				log.Printf("Send channel closed for client %s", client.clientID)
 				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
+			log.Printf("Attempting to send message type %s to client %s", getMessageType(msg), client.clientID)
 			if err := client.conn.WriteJSON(msg); err != nil {
+				log.Printf("Write error for client %s: %v", client.clientID, err)
 				return
 			}
+			log.Printf("Successfully sent message type %s to client %s", getMessageType(msg), client.clientID)
 
 		case <-ticker.C:
 			client.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := client.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("Ping error for client %s: %v", client.clientID, err)
 				return
 			}
+			log.Printf("Sent PING to client %s", client.clientID)
 		}
 	}
 }
 
-// Обработчик REST API - Обнаружение
-func handleDetect(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w, appConfig)
-
-	// Обработка preflight OPTIONS запросов
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent) // 204, не 200!
-		return
+// Вспомогательная функция для получения типа сообщения
+func getMessageType(msg interface{}) string {
+	if wsMsg, ok := msg.(WebSocketMessage); ok {
+		return wsMsg.Type
 	}
-
-	// Проверка метода
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": "Method not allowed",
-		})
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
-
-	// Парсирование запроса
-	var req models.DetectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
-
-	// Проверка пустого кадра
-	if req.Frame == "" {
-		http.Error(w, "Empty frame data", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Frame) > 8*1024*1024 { //
-		http.Error(w, "Frame data too large (max 8MB)", http.StatusBadRequest)
-		return
-	}
-
-	// Декодирование base64 в байты
-	frameBytes, err := base64.StdEncoding.DecodeString(req.Frame)
-	if err != nil {
-		log.Printf("Base64 decode error: %v", err)
-		http.Error(w, "Invalid frame data format", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("Received frame: size=%d bytes, sequence=%d", len(frameBytes), req.SequenceNumber)
-
-	// Проверка доступности gRPC клиента
-	if grpcClient == nil {
-		log.Println("WARNING: gRPC client is nil - ML service unavailable")
-		log.Println("DEBUG: This means the connection failed at startup or was never established")
-		http.Error(w, "ML service unavailable", http.StatusServiceUnavailable)
-		return
-	}
-
-	if !grpcClient.HealthCheck() {
-		log.Printf("WARNING: gRPC client exists but connection is not healthy")
-		http.Error(w, "ML service connection lost", http.StatusServiceUnavailable)
-		return
-	}
-
-	// Создание protobuf сообщения для ML сервиса
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-
-	videoFrame := &pb.VideoFrame{
-		FrameData:      frameBytes,
-		Timestamp:      req.Timestamp,
-		SequenceNumber: req.SequenceNumber,
-	}
-
-	// Отправка на Python ML сервис через gRPC
-	result, err := grpcClient.ProcessFrame(ctx, videoFrame)
-	if err != nil {
-		log.Printf("ML processing error: %v", err)
-		http.Error(w, "Processing failed", http.StatusInternalServerError)
-		return
-	}
-
-	// Успешный ответ
-	w.WriteHeader(http.StatusOK)
-	response := map[string]interface{}{
-		"is_drowsy":        result.IsDrowsy,
-		"drowsiness_score": float64(result.DrowsinessScore),
-		"alert_level":      result.AlertLevel,
-		"timestamp":        time.Now().Unix(),
-		"inference_time":   result.InferenceTimeMs,
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Encode response error: %v", err)
-	}
-
-	log.Printf("Detection result: drowsy=%v, score=%.2f", result.IsDrowsy, result.DrowsinessScore)
+	return "unknown"
 }
 
 // Обработчик REST API - Проверка здоровья
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w, appConfig)
+	enableCORS(w, r, appConfig)
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -537,7 +648,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // Обработчик REST API - Метрики
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w, appConfig)
+	enableCORS(w, r, appConfig)
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodGet {
@@ -577,9 +688,13 @@ func closeAllWebSocketConnections() {
 	defer wsClients.mu.Unlock()
 
 	for clientID, client := range wsClients.clients {
-		close(client.send)
+		// Закрываем канал отправки только если он еще не закрыт
+		if atomic.CompareAndSwapInt32(&client.closed, 0, 1) {
+			close(client.send)
+		}
 		client.conn.Close()
 		log.Printf("Closed connection for client: %s", clientID)
 	}
 	wsClients.clients = make(map[string]*WebSocketClient)
 }
+

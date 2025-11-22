@@ -58,6 +58,11 @@ face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
+# Детектор глаз (Haar Cascade)
+eye_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_eye.xml"
+)
+
 
 class DrowsinessDetectionService(DrowsinessDetectionServicer):
     # gRPC Service для обнаружения сонливости
@@ -97,12 +102,69 @@ class DrowsinessDetectionService(DrowsinessDetectionServicer):
                 minSize=(80, 80)
             )
 
+            # Если лицо не обнаружено, возвращаем ошибку
+            if len(faces) == 0:
+                processing_time = int((time.time() - start_time) * 1000)
+                print(f"[DETECT] Frame #{request.sequence_number}: Лицо не обнаружено")
+                return DetectionResult(
+                    sequence_number=request.sequence_number,
+                    drowsiness_score=1.0,  # Высокий score для отсутствия лица
+                    is_drowsy=True,  # Считаем сонливостью, если лицо не видно
+                    alert_level="ЛИЦО НЕ ОБНАРУЖЕНО",
+                    inference_time_ms=float(processing_time),
+                    timestamp=int(time.time() * 1000),
+                    client_timestamp=request.timestamp,
+                    eyes_looking_forward=False,
+                    eye_direction_score=1.0,
+                    head_angle=0.0
+                )
+
             # Берём самое большое лицо
-            if len(faces) > 0:
-                x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-                crop = frame[y:y + fh, x:x + fw]
-            else:
-                crop = frame
+            x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+            face_roi = gray[y:y + fh, x:x + fw]
+            crop = frame[y:y + fh, x:x + fw]
+
+            # Проверяем наличие глаз в области лица
+            eyes = eye_cascade.detectMultiScale(
+                face_roi,
+                scaleFactor=1.1,
+                minNeighbors=3,
+                minSize=(20, 20)
+            )
+
+            # Если глаза не обнаружены, считаем это сонливостью
+            if len(eyes) == 0:
+                processing_time = int((time.time() - start_time) * 1000)
+                print(f"[DETECT] Frame #{request.sequence_number}: Глаза не обнаружены")
+                return DetectionResult(
+                    sequence_number=request.sequence_number,
+                    drowsiness_score=0.9,  # Высокий score для закрытых глаз
+                    is_drowsy=True,
+                    alert_level="ГЛАЗА НЕ ОБНАРУЖЕНЫ",
+                    inference_time_ms=float(processing_time),
+                    timestamp=int(time.time() * 1000),
+                    client_timestamp=request.timestamp,
+                    eyes_looking_forward=False,
+                    eye_direction_score=0.9,
+                    head_angle=0.0
+                )
+
+            # Если обнаружено менее 2 глаз, также считаем сонливостью
+            if len(eyes) < 2:
+                processing_time = int((time.time() - start_time) * 1000)
+                print(f"[DETECT] Frame #{request.sequence_number}: Обнаружен только {len(eyes)} глаз")
+                return DetectionResult(
+                    sequence_number=request.sequence_number,
+                    drowsiness_score=0.85,
+                    is_drowsy=True,
+                    alert_level="НЕДОСТАТОЧНО ГЛАЗ",
+                    inference_time_ms=float(processing_time),
+                    timestamp=int(time.time() * 1000),
+                    client_timestamp=request.timestamp,
+                    eyes_looking_forward=False,
+                    eye_direction_score=0.85,
+                    head_angle=0.0
+                )
 
             # Преобразуем в тензор
             pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
@@ -175,11 +237,55 @@ class DrowsinessDetectionService(DrowsinessDetectionServicer):
                     minSize=(80, 80)
                 )
 
-                if len(faces) > 0:
-                    x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
-                    crop = frame[y:y + fh, x:x + fw]
-                else:
-                    crop = frame
+                # Если лицо не обнаружено, пропускаем кадр с предупреждением
+                if len(faces) == 0:
+                    print(f"[STREAM] Frame #{request.sequence_number}: Лицо не обнаружено")
+                    yield DetectionResult(
+                        sequence_number=request.sequence_number,
+                        drowsiness_score=1.0,
+                        is_drowsy=True,
+                        alert_level="ЛИЦО НЕ ОБНАРУЖЕНО",
+                        inference_time_ms=0.0,
+                        timestamp=int(time.time() * 1000),
+                        client_timestamp=request.timestamp,
+                        eyes_looking_forward=False,
+                        eye_direction_score=1.0,
+                        head_angle=0.0
+                    )
+                    continue
+
+                # Берём самое большое лицо
+                x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+                face_roi = gray[y:y + fh, x:x + fw]
+                crop = frame[y:y + fh, x:x + fw]
+
+                # Проверяем наличие глаз в области лица
+                eyes = eye_cascade.detectMultiScale(
+                    face_roi,
+                    scaleFactor=1.1,
+                    minNeighbors=3,
+                    minSize=(20, 20)
+                )
+
+                # Если глаза не обнаружены или недостаточно, считаем сонливостью
+                if len(eyes) < 2:
+                    start = time.time()
+                    inference_time = int((time.time() - start) * 1000)
+                    alert_msg = "ГЛАЗА НЕ ОБНАРУЖЕНЫ" if len(eyes) == 0 else "НЕДОСТАТОЧНО ГЛАЗ"
+                    score = 0.9 if len(eyes) == 0 else 0.85
+                    yield DetectionResult(
+                        sequence_number=request.sequence_number,
+                        drowsiness_score=score,
+                        is_drowsy=True,
+                        alert_level=alert_msg,
+                        inference_time_ms=float(inference_time),
+                        timestamp=int(time.time() * 1000),
+                        client_timestamp=request.timestamp,
+                        eyes_looking_forward=False,
+                        eye_direction_score=score,
+                        head_angle=0.0
+                    )
+                    continue
 
                 # Преобразуем в тензор
                 pil_img = Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))

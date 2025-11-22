@@ -56,12 +56,6 @@ type WSMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
-type WSFrameMessage struct {
-	Frame          string `json:"frame"`
-	Timestamp      int64  `json:"timestamp"`
-	SequenceNumber int32  `json:"sequence_number"`
-}
-
 type WSResultMessage struct {
 	IsDrowsy        bool    `json:"is_drowsy"`
 	DrowsinessScore float32 `json:"drowsiness_score"`

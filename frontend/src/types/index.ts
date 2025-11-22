@@ -26,8 +26,10 @@ export interface DetectionResult {
   is_drowsy: boolean;
   drowsiness_score: number;
   alert_level: string;
-  timestamp: number;
+  inference_time_ms?: number;
+  timestamp?: number;
   inference_time?: number;
+  sequence_number?: number;
 }
 
 export interface CreateSessionRequest {

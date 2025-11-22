@@ -47,3 +47,9 @@ type CreateEventRequest struct {
 	DrowsinessScore float64 `json:"drowsiness_score"`
 	IsDrowsy        bool    `json:"is_drowsy"`
 }
+
+type WSFrameMessage struct {
+	Frame          string `json:"frame"`
+	Timestamp      int64  `json:"timestamp"`
+	SequenceNumber int32  `json:"sequence_number"`
+}

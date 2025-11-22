@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authAPI, sessionsAPI } from '../services/api';
+import { authAPI } from '../services/api';
+import { wsService } from '../services/websocket';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -49,6 +50,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(userData);
     setSessionVerified(true);
     setLoading(false);
+    
+    // Переподключаем WebSocket после успешного логина
+    wsService.reconnectAfterAuth();
   };
 
   const register = async (email: string, username: string, password: string) => {
@@ -59,11 +63,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(userData);
     setSessionVerified(true);
     setLoading(false);
+    
+    // Переподключаем WebSocket после успешной регистрации
+    wsService.reconnectAfterAuth();
   };
 
   const logout = async () => {
     try {
       await authAPI.logout();
+      // Отключаем WebSocket при выходе
+      wsService.disconnect();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
