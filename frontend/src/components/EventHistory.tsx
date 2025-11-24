@@ -157,7 +157,7 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
                   <span className="stat-value drowsy">{stats.drowsy}</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-label">Бодровствование</span>
+                  <span className="stat-label">Бодрствование</span>
                   <span className="stat-value alert">{stats.alert}</span>
                 </div>
                 <div className="stat-item">
@@ -176,7 +176,7 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
                   Сонливость
                 </button>
                 <button onClick={() => setFilter('alert')} className={`filter-btn ${filter === 'alert' ? 'active' : ''}`}>
-                  Бодровствование
+                  Бодрствование
                 </button>
               </div>
 
@@ -202,7 +202,7 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
                             <div className="event-content">
                               <div className="event-header-row">
                         <span className="event-status">
-                          {event.is_drowsy ? 'Сонливость обнаружена' : 'Бодровствование'}
+                          {event.is_drowsy ? 'Сонливость обнаружена' : 'Бодрствование'}
                         </span>
                                 <span className="event-time">{formatDate(event.timestamp)}</span>
                               </div>

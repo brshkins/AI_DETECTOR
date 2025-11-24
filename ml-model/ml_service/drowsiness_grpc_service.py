@@ -183,7 +183,7 @@ class DrowsinessDetectionService(DrowsinessDetectionServicer):
                 alert_level = "СОНЛИВОСТЬ"
                 is_drowsy = True
             else:
-                alert_level = "БОДРОВСТВОВАНИЕ"
+                alert_level = "БОДРСТВОВАНИЕ"
                 is_drowsy = False
 
             print(
@@ -301,7 +301,7 @@ class DrowsinessDetectionService(DrowsinessDetectionServicer):
 
                 # Определяем уровень тревоги
                 is_drowsy = score >= THRESHOLD
-                alert_level = "СОНЛИВОСТЬ" if is_drowsy else "БОДРОВСТВОВАНИЕ"
+                alert_level = "СОНЛИВОСТЬ" if is_drowsy else "БОДРСТВОВАНИЕ"
 
                 # Отправляем результат
                 yield DetectionResult(

@@ -1,6 +1,6 @@
 .home-page {
   min-height: 100vh;
-  background: transparent;
+  background: linear-gradient(135deg, #e8f4f8 0%, #ffe5e5 50%, #fff4e6 100%);
   padding: 2rem;
   position: relative;
   z-index: 1;
@@ -24,47 +24,21 @@
   color: #6b7280;
 }
 
-.page-content {
-  display: grid;
-  grid-template-columns: 1fr 400px;
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 2rem;
-  max-width: 1600px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
-.main-section {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+.sessions-manager {
+  width: 100%;
+  max-width: 800px;
 }
 
-.camera-section,
-.results-section {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(168, 213, 226, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  position: relative;
-  z-index: 1;
-}
-
-.sidebar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.sidebar-item {
-}
-
-@media (max-width: 1200px) {
-  .page-content {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* Адаптивность */
 @media (max-width: 768px) {
   .home-page {
     padding: 1rem;
@@ -73,12 +47,4 @@
   .page-header h1 {
     font-size: 2rem;
   }
-
-  .main-section {
-    gap: 1rem;
-  }
 }
-
-
-
-

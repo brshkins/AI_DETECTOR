@@ -19,7 +19,6 @@ export interface CameraFeedRef {
 
 export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
     ({ onDetectionResult, onError, captureInterval = 1000, hasActiveSession = false, onEndSession }, ref) => {
-        // Убрали `sessionId` из деструктуризации — он не используется
         const videoRef = useRef<HTMLVideoElement>(null);
         const canvasRef = useRef<HTMLCanvasElement>(null);
         const [isStreaming, setIsStreaming] = useState(false);
@@ -215,7 +214,6 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
                     {!isStreaming && (
                         <div className="camera-placeholder">
                             <p>Камера выключена</p>
-                            <p className="camera-hint">Создайте сеанс, чтобы начать</p>
                         </div>
                     )}
                     {error && (

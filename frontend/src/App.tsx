@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './components/LoginForm';
 import { HomePage } from './pages/HomePage';
+import { DetectionPage } from './pages/DetectionPage';
 import { SessionDetailsPage } from './pages/SessionDetailsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
@@ -33,7 +34,16 @@ const AppRoutes: React.FC = () => {
           </PrivateRoute>
         }
       />
-      <Route
+        <Route
+            path="/detection/:sessionId"
+            element={
+                <PrivateRoute>
+                    <DetectionPage />
+                </PrivateRoute>
+            }
+        />
+
+        <Route
         path="/session/:sessionId"
         element={
           <PrivateRoute>

@@ -144,6 +144,18 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: time.Now(),
 	}
 
+	sessionID := generateSessionID(req.Email)
+	userSessions[sessionID] = user.ID
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_id",
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   86400,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(user)
@@ -288,48 +300,43 @@ func GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateSession(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w)
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	var req models.CreateSessionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	userID, exists := GetUserIDFromCookie(r)
-	if !exists {
+	userID, ok := GetUserIDFromCookie(r)
+	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	var req models.CreateSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
+	var sessionID int
+	var startTime time.Time
 
-	var sessionID int64
+	// Явно используем MSK
+	now := time.Now().UTC()
+
 	err := database.DB.QueryRow(
-		"INSERT INTO sessions (user_id, notes) VALUES ($1, $2) RETURNING id",
-		userID, req.Notes,
-	).Scan(&sessionID)
+		"INSERT INTO sessions (user_id, notes, status, start_time) VALUES ($1, $2, $3, $4) RETURNING id, start_time",
+		userID, req.Notes, "active", now,
+	).Scan(&sessionID, &startTime)
 
 	if err != nil {
-		log.Printf("CreateSession error: %v", err)
-		http.Error(w, "Failed to create session", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	session := models.Session{
-		ID:        int(sessionID),
-		UserID:    userID,
-		StartTime: time.Now(),
-		Status:    "active",
-		Notes:     req.Notes,
+	response := map[string]interface{}{
+		"id":         sessionID,
+		"start_time": now, // 2023-11-23T23:30:00+03:00
+		"status":     "active",
+		"notes":      req.Notes,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(session)
-	log.Printf("Session created: ID=%d for user %d", sessionID, userID)
+	json.NewEncoder(w).Encode(response)
 }
 
 func GetSessions(w http.ResponseWriter, r *http.Request) {
@@ -397,7 +404,7 @@ func EndSession(w http.ResponseWriter, r *http.Request) {
 
 	result, err := database.DB.Exec(
 		"UPDATE sessions SET end_time = $1, status = 'completed' WHERE id = $2 AND user_id = $3",
-		time.Now(), sessionID, userID,
+		time.Now().UTC(), sessionID, userID,
 	)
 	if err != nil {
 		log.Printf("Failed to end session: %v", err)
@@ -543,7 +550,7 @@ func SaveEvent(w http.ResponseWriter, r *http.Request) {
 		SessionID:       req.SessionID,
 		DrowsinessScore: req.DrowsinessScore,
 		IsDrowsy:        req.IsDrowsy,
-		Timestamp:       time.Now(),
+		Timestamp:       time.Now().UTC(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

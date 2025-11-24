@@ -39,7 +39,7 @@ type LoginRequest struct {
 }
 
 type CreateSessionRequest struct {
-	Notes string `json:"notes,omitempty"`
+	Notes string `json:"notes"`
 }
 
 type CreateEventRequest struct {
