@@ -330,7 +330,7 @@ func CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]interface{}{
 		"id":         sessionID,
-		"start_time": now, // 2023-11-23T23:30:00+03:00
+		"start_time": now,
 		"status":     "active",
 		"notes":      req.Notes,
 	}
