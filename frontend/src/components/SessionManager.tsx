@@ -24,7 +24,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [notes, setNotes] = useState('');
 
-  // Пагинация
+  // пагинация
   const [currentPage, setCurrentPage] = useState(1);
   const sessionsPerPage = 5;
 
@@ -67,7 +67,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     e.preventDefault();
     setError(null);
 
-    const sessionNotes = notes.trim() || `Поездка: ${formatDateTime(new Date())}`;
+    const sessionNotes = notes.trim() || `Поездка: ${formatDateTime(new Date().toISOString())}`;
 
     try {
       const newSession = await sessionsAPI.createSession(sessionNotes);
@@ -82,6 +82,8 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   };
 
   const handleEndSession = async (sessionId: number) => {
+    console.log('handleEndSession called', { sessionId, currentSessionId, hasOnEndSession: !!onEndSession });
+
     if (!confirm('Вы уверены, что хотите завершить эту сессию и выключить камеру?')) {
       return;
     }
@@ -89,13 +91,17 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     setError(null);
     try {
       if (currentSessionId === sessionId && onEndSession) {
+        console.log('Using onEndSession prop');
         await onEndSession(sessionId);
         await loadSessions();
       } else {
+        console.log('Using API directly');
         await sessionsAPI.endSession(sessionId);
         await loadSessions();
       }
+      console.log('Session ended successfully');
     } catch (err) {
+      console.error('Error ending session:', err);
       setError(err instanceof Error ? err.message : 'Не удалось завершить сеанс');
     }
   };
@@ -145,7 +151,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
     return `${hours}ч ${minutes}м ${seconds}с`;
   };
 
-  // Пагинация
+  // пагинация
   const totalPages = Math.ceil(sessions.length / sessionsPerPage);
   const startIndex = (currentPage - 1) * sessionsPerPage;
   const currentSessions = sessions.slice(startIndex, startIndex + sessionsPerPage);
@@ -167,14 +173,14 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
   };
 
   return (
-      <div className="session-manager">
-        <div className="session-header">
-          <h2>Поездки</h2>
+      <div className="sessions-manager">
+        <div className="section-header">
+          <h2 className="section-title">Поездки</h2>
           <button
               onClick={() => setShowCreateForm(!showCreateForm)}
-              className="btn btn-primary"
+              className="btn-add"
           >
-            {showCreateForm ? 'Назад' : 'Добавить'}
+            {showCreateForm ? 'Назад' : '+ Добавить'}
           </button>
         </div>
 
@@ -187,6 +193,7 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Добавьте информацию о вашей поездке..."
+                    style={{ fontFamily: "inherit" }}
                     rows={3}
                 />
               </div>
@@ -213,88 +220,71 @@ export const SessionManager: React.FC<SessionManagerProps> = ({
             <>
               <div className="session-list">
                 {currentSessions.map((session) => (
-                    <div
-                        key={session.id}
-                        className={`session-item ${currentSessionId === session.id ? 'active' : ''} ${
-                            session.status === 'active' ? 'status-active' : 'status-completed'
-                        }`}
-                    >
-                      <div className="session-info">
-                        <div className="session-id">
-                          {session.notes || `Сеанс`}
+                    <div className="session-card">
+                        <div className="session-header">
+                            <div>
+                                <div className="session-time">Поездка: {formatDateTime(session.start_time)}</div>
+                                <div className="session-meta">
+                                    <div className="session-meta-item">Начало: {formatDate(session.start_time)}</div>
+                                    {session.end_time && (
+                                        <div className="session-meta-item">Конец: {formatDate(session.end_time)}</div>
+                                    )}
+                                    <div className="session-meta-item">Время: {getDuration(session.start_time, session.end_time)}</div>
+                                </div>
+                            </div>
+                            <div className="status-badge">{session.status === 'completed' || session.status === 'завершен' ? 'Завершен' : 'Активен'}</div>
                         </div>
-                        <div className="session-time">
-                          Начало: {formatDate(session.start_time)}
-                        </div>
-                        {session.end_time && (
-                            <div className="session-time">
-                              Конец: {formatDate(session.end_time)}
+                        {(session.status === 'completed' || session.status === 'завершен') && (
+                            <div className="session-actions">
+                                <button className="btn-small btn-view" onClick={() => onViewSession?.(session.id)}>
+                                    Смотреть
+                                </button>
+                                <button className="btn-small btn-delete" onClick={() => handleDeleteSession(session.id)}>
+                                    🗑️
+                                </button>
                             </div>
                         )}
-                        <div className="session-duration">
-                          Время поездки: {getDuration(session.start_time, session.end_time)}
-                        </div>
-                        <div className="session-status">
-                    <span className={`status-badge ${session.status}`}>
-                      {session.status === 'completed' || session.status === 'завершен' ? 'завершен' : session.status}
-                    </span>
-                        </div>
-                      </div>
-                      <div className="session-actions">
                         {session.status === 'active' && (
-                            <>
-                              {currentSessionId !== session.id && (
-                                  <button
-                                      onClick={() => onSessionSelect?.(session.id)}
-                                      className="btn btn-secondary btn-sm"
-                                  >
+                            <div className="session-actions">
+                                <button className="btn-small btn-view" onClick={() => onSessionSelect?.(session.id)}>
                                     Выбрать
-                                  </button>
-                              )}
-                              <button
-                                  onClick={() => handleEndSession(session.id)}
-                                  className="btn btn-danger btn-sm"
-                              >
-                                Конец
-                              </button>
-                            </>
+                                </button>
+                                <button className="btn-small btn-delete" onClick={() => handleEndSession(session.id)}>
+                                    Конец
+                                </button>
+                            </div>
                         )}
-                        {(session.status === 'completed' || session.status === 'завершен') && (
-                            <>
-                              <button
-                                  onClick={() => onViewSession?.(session.id)}
-                                  className="btn btn-secondary btn-sm"
-                              >
-                                Смотреть
-                              </button>
-                              <button
-                                  onClick={() => handleDeleteSession(session.id)}
-                                  className="btn btn-danger btn-sm"
-                                  title="Удалить сеанс"
-                              >
-                                🗑️
-                              </button>
-                            </>
-                        )}
-                      </div>
                     </div>
                 ))}
               </div>
-
-              {/* Пагинация */}
               <div className="pagination">
-                <button onClick={handleFirstPage} disabled={currentPage === 1}>
-                  В начало
-                </button>
-                <button onClick={handlePrevPage} disabled={currentPage === 1}>
-                  Предыдущая
-                </button>
-                <span>
-              Страница {currentPage} из {totalPages}
-            </span>
-                <button onClick={handleNextPage} disabled={currentPage === totalPages}>
-                  Следующая
-                </button>
+                {currentPage > 1 && (
+                    <>
+                      <button
+                          onClick={handleFirstPage}
+                          className="btn btn-primary btn-pagination"
+                      >
+                        В начало
+                      </button>
+                      <button
+                          onClick={handlePrevPage}
+                          className="btn btn-secondary btn-pagination"
+                      >
+                        ← Предыдущая
+                      </button>
+                    </>
+                )}
+                <span className="pagination-info">
+                Страница {currentPage} из {totalPages}
+                </span>
+                {currentPage < totalPages && (
+                    <button
+                        onClick={handleNextPage}
+                        className="btn btn-primary btn-pagination"
+                    >
+                      Следующая →
+                    </button>
+                )}
               </div>
             </>
         )}

@@ -7,7 +7,7 @@ interface EventHistoryProps {
   sessionId: number | null;
 }
 
-const EVENTS_PER_PAGE = 3;
+const EVENTS_PER_PAGE = 10;
 
 export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
   const [events, setEvents] = useState<Event[]>([]);
@@ -83,14 +83,77 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
     return combined;
   };
 
+  const combineEventsByPercentageRange = (events: Event[]): Array<Event & { duration?: number; count?: number }> => {
+    if (events.length === 0) return [];
+
+    const combined: Array<Event & { duration?: number; count?: number }> = [];
+    let currentGroup: Event[] = [events[0]];
+
+    const getPercentageRange = (score: number): number => {
+      const percentage = Math.round(score * 100);
+      return Math.floor(percentage / 10) * 10;
+    };
+
+    for (let i = 1; i < events.length; i++) {
+      const prevEvent = events[i - 1];
+      const currentEvent = events[i];
+      const currentRange = getPercentageRange(currentEvent.drowsiness_score);
+
+      if (
+          prevEvent.is_drowsy === currentEvent.is_drowsy &&
+          currentRange === getPercentageRange(prevEvent.drowsiness_score)
+      ) {
+        currentGroup.push(currentEvent);
+      } else {
+        const mostRecentTime = new Date(currentGroup[0].timestamp).getTime();
+        const oldestTime = new Date(currentGroup[currentGroup.length - 1].timestamp).getTime();
+        const duration = Math.floor((mostRecentTime - oldestTime) / 1000);
+
+        const averageScore =
+            currentGroup.reduce((sum, e) => sum + e.drowsiness_score, 0) /
+            currentGroup.length;
+
+        combined.push({
+          ...currentGroup[0],
+          drowsiness_score: averageScore,
+          duration,
+          count: currentGroup.length,
+        });
+
+        currentGroup = [currentEvent];
+      }
+    }
+
+    if (currentGroup.length > 0) {
+      const mostRecentTime = new Date(currentGroup[0].timestamp).getTime();
+      const oldestTime = new Date(currentGroup[currentGroup.length - 1].timestamp).getTime();
+      const duration = Math.floor((mostRecentTime - oldestTime) / 1000);
+
+      const averageScore =
+          currentGroup.reduce((sum, e) => sum + e.drowsiness_score, 0) /
+          currentGroup.length;
+
+      combined.push({
+        ...currentGroup[0],
+        drowsiness_score: averageScore,
+        duration,
+        count: currentGroup.length,
+      });
+    }
+
+    return combined;
+  };
+
   const filteredEvents = (events || []).filter((event) => {
     if (filter === 'drowsy') return event.is_drowsy;
     if (filter === 'alert') return !event.is_drowsy;
     return true;
   });
 
-  const combinedEvents = combineConsecutiveEvents(filteredEvents);
-  const visibleEvents = combinedEvents.slice(0, visibleCount);
+  const combinedEvents =
+      filter === "all"
+          ? combineConsecutiveEvents(filteredEvents)
+          : combineEventsByPercentageRange(filteredEvents);   const visibleEvents = combinedEvents.slice(0, visibleCount);
 
   const loadMore = () => {
     setVisibleCount(prev => prev + EVENTS_PER_PAGE);
@@ -231,8 +294,6 @@ export const EventHistory: React.FC<EventHistoryProps> = ({ sessionId }) => {
                           </div>
                       );
                     })}
-
-                    {/* Кнопка "Загрузить ещё" */}
                     {visibleCount < combinedEvents.length && (
                         <div className="load-more-container">
                           <button onClick={loadMore} className="btn btn-secondary">

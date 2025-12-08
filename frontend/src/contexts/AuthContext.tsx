@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSessionVerified(true);
     setLoading(false);
     
-    // Переподключаем WebSocket после успешного логина
+    // переподключает WebSocket после успешного логина
     wsService.reconnectAfterAuth();
   };
 
@@ -64,14 +64,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSessionVerified(true);
     setLoading(false);
     
-    // Переподключаем WebSocket после успешной регистрации
     wsService.reconnectAfterAuth();
   };
 
   const logout = async () => {
     try {
+      // завершаем все активные сессии перед выходом
+      try {
+        const { sessionsAPI } = await import('../services/api');
+        const sessions = await sessionsAPI.getSessions();
+        const activeSessions = sessions.filter((s: any) => s.status === 'active');
+
+        if (activeSessions.length > 0) {
+          const endPromises = activeSessions.map(session =>
+            sessionsAPI.endSession(session.id).catch(err =>
+              console.warn(`Failed to end session ${session.id}:`, err)
+            )
+          );
+          await Promise.allSettled(endPromises);
+        }
+      } catch (error) {
+        console.warn('Failed to auto-end sessions during logout:', error);
+      }
+
       await authAPI.logout();
-      // Отключаем WebSocket при выходе
       wsService.disconnect();
     } catch (error) {
       console.error('Logout error:', error);
@@ -105,6 +121,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-
-

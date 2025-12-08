@@ -333,7 +333,7 @@ func startHTTPServer(httpPort string) {
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	log.Printf("WebSocket connection attempt from %s, Origin: %s", r.RemoteAddr, r.Header.Get("Origin"))
-	
+
 	userID, exists := handlers.GetUserIDFromCookie(r)
 	if !exists {
 		log.Printf("WebSocket connection rejected: user not authenticated (no session_id cookie)")
@@ -417,20 +417,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Ждем завершения readPump (когда соединение закроется)
-	// writePump также завершится при закрытии соединения
-	// defer закроет соединение и удалит клиента
-	select {} // Блокируем навсегда, defer закроет соединение когда readPump завершится
+	select {}
 }
 
 // Цикл чтения из WebSocket
 func readPump(client *WebSocketClient) {
 	defer func() {
 		log.Printf("readPump exiting for client %s", client.clientID)
-		// Не закрываем соединение здесь - оно уже закрыто или будет закрыто в defer handleWebSocket
 	}()
 
-	// Увеличиваем таймаут чтения до 70 секунд (больше чем интервал PING 54 секунды)
 	client.conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 	client.conn.SetPongHandler(func(string) error {
 		log.Printf("Received PONG from client %s", client.clientID)
@@ -456,7 +451,6 @@ func readPump(client *WebSocketClient) {
 
 		log.Printf("Received from %s: %s", client.clientID, msg.Type)
 
-		// Обработка сообщений
 		switch msg.Type {
 		case "PING":
 			client.send <- WebSocketMessage{
@@ -567,13 +561,11 @@ func readPump(client *WebSocketClient) {
 	}
 }
 
-// Цикл отправки в WebSocket
 func writePump(client *WebSocketClient) {
-	ticker := time.NewTicker(54 * time.Second) // Отправляем PING каждые 54 секунды (меньше чем read deadline 60 сек)
+	ticker := time.NewTicker(54 * time.Second)
 	defer func() {
 		log.Printf("writePump exiting for client %s", client.clientID)
 		ticker.Stop()
-		// Не закрываем соединение здесь - оно будет закрыто в defer handleWebSocket
 	}()
 
 	log.Printf("writePump started for client %s, ready to send messages...", client.clientID)
@@ -607,7 +599,6 @@ func writePump(client *WebSocketClient) {
 	}
 }
 
-// Вспомогательная функция для получения типа сообщения
 func getMessageType(msg interface{}) string {
 	if wsMsg, ok := msg.(WebSocketMessage); ok {
 		return wsMsg.Type
@@ -615,7 +606,6 @@ func getMessageType(msg interface{}) string {
 	return "unknown"
 }
 
-// Обработчик REST API - Проверка здоровья
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w, r, appConfig)
 
@@ -646,7 +636,6 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Обработчик REST API - Метрики
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w, r, appConfig)
 	w.Header().Set("Content-Type", "application/json")
@@ -678,7 +667,6 @@ func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Генерация ID клиента
 func generateClientID() string {
 	return "client-" + time.Now().Format("20060102150405")
 }
@@ -688,7 +676,6 @@ func closeAllWebSocketConnections() {
 	defer wsClients.mu.Unlock()
 
 	for clientID, client := range wsClients.clients {
-		// Закрываем канал отправки только если он еще не закрыт
 		if atomic.CompareAndSwapInt32(&client.closed, 0, 1) {
 			close(client.send)
 		}
@@ -697,4 +684,3 @@ func closeAllWebSocketConnections() {
 	}
 	wsClients.clients = make(map[string]*WebSocketClient)
 }
-

@@ -2,6 +2,7 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+  font-size: 18px;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -19,4 +20,3 @@ body {
   width: 100%;
   min-height: 100vh;
 }
-

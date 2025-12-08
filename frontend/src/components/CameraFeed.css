@@ -20,7 +20,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Mirror the video */
+  transform: scaleX(-1);
 }
 
 .camera-placeholder {
@@ -94,24 +94,3 @@
 .btn-secondary:hover {
   background: #4b5563;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

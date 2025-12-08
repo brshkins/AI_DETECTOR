@@ -45,6 +45,10 @@ export const LoginForm: React.FC = () => {
   return (
     <div className="login-container">
       <DecorativeElements />
+      <div className="page-header">
+        <h1>Детектор сонливости</h1>
+        <p>Обеспечит безопасность на дороге</p>
+      </div>
       <div className="login-card">
         <h2>{isLogin ? 'Вход' : 'Регистрация'}</h2>
         <form onSubmit={handleSubmit}>
@@ -72,6 +76,9 @@ export const LoginForm: React.FC = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="Введите почту"
+              autoComplete="off"
+              spellCheck="false"
+              inputMode="email"
             />
           </div>
           <div className="form-group">
@@ -84,6 +91,8 @@ export const LoginForm: React.FC = () => {
               required
               placeholder="Введите пароль"
               minLength={8}
+              autoComplete="off"
+              spellCheck="false"
             />
             {!isLogin && (
               <small>Пароль должен состоять из 8 и более символов, включая хотя бы одну букву и одну цифру</small>
@@ -113,6 +122,3 @@ export const LoginForm: React.FC = () => {
     </div>
   );
 };
-
-
-

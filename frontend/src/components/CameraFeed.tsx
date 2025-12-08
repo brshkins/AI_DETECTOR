@@ -138,7 +138,6 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
             }
         }, [isDetecting, isStreaming, onError]);
 
-        // Регистрируем обработчики сообщений один раз
         useEffect(() => {
             const handleDetectionResult = (payload: any) => {
                 const result: DetectionResult = {
@@ -147,7 +146,7 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
                     alert_level: payload.alert_level,
                     inference_time_ms: payload.inference_time,
                     timestamp: payload.timestamp,
-                    sequence_number: payload.sequence_number, // ✅ Теперь тип поддерживает это поле
+                    sequence_number: payload.sequence_number,
                 };
                 setHasDetected(true);
                 onDetectionResult?.(result);
@@ -168,15 +167,13 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
             wsService.on('WELCOME', handleWelcome);
 
             return () => {
-                // НЕ отключаем WebSocket при размонтировании компонента
-                // Только удаляем обработчики
                 wsService.off('DETECTION_RESULT', handleDetectionResult);
                 wsService.off('ERROR', handleError);
                 wsService.off('WELCOME', handleWelcome);
             };
-        }, [onDetectionResult, onError]); // Регистрируем обработчики один раз
+        }, [onDetectionResult, onError]);
 
-        // Подключаемся к WebSocket когда появляется активная сессия
+        // подключение к WebSocket, когда появляется активная сессия
         useEffect(() => {
             if (hasActiveSession) {
                 if (!wsService.isConnected()) {
@@ -227,8 +224,11 @@ export const CameraFeed = forwardRef<CameraFeedRef, CameraFeedProps>(
                 </div>
                 {isStreaming && (
                     <div className="camera-controls">
-                        <button onClick={handleEndSession} className="btn btn-danger">
-                            Завершить сеанс
+                        <button
+                            onClick={handleEndSession}
+                            className="btn btn-danger"
+                        >
+                            Завершить поездку
                         </button>
                         <span className="status-indicator">{hasDetected ? 'Активен' : 'Запуск...'}</span>
                     </div>

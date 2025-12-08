@@ -18,11 +18,10 @@ class WebSocketService {
     private shouldReconnect = true;
 
     constructor(url?: string) {
-        // Используем относительный URL для WebSocket, чтобы cookies отправлялись автоматически
+        // относительный URL для WebSocket, чтобы cookies отправлялись автоматически
         if (url) {
             this.url = url;
         } else {
-            // Определяем WebSocket URL на основе текущего протокола и хоста
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const host = window.location.host;
             this.url = `${protocol}//${host}/ws`;
@@ -35,10 +34,8 @@ class WebSocketService {
             return;
         }
 
-        // WebSocket автоматически отправляет cookies для того же домена
-        // HttpOnly cookies не видны в document.cookie, но они отправляются автоматически
         this.shouldReconnect = true;
-        this.reconnectAttempts = 0; // Сбрасываем счетчик при новом подключении
+        this.reconnectAttempts = 0;
         console.log('Attempting WebSocket connection to:', this.url);
         this.ws = new WebSocket(this.url);
 
@@ -46,17 +43,14 @@ class WebSocketService {
             console.log('WebSocket connected, readyState:', this.ws?.readyState);
             this.reconnectAttempts = 0;
             this.trigger('open');
-            // Не закрываем соединение - ждем сообщения от сервера
         };
 
         this.ws.onmessage = (event) => {
             try {
-                // WebSocket API автоматически обрабатывает PING/PONG на уровне протокола
                 if (typeof event.data === 'string') {
                     const data: WebSocketMessage = JSON.parse(event.data);
                     this.handleMessage(data);
                 } else {
-                    // Игнорируем бинарные сообщения (PING/PONG обрабатываются автоматически)
                     console.log('Received binary message (likely PING/PONG)');
                 }
             } catch (err) {
@@ -66,11 +60,8 @@ class WebSocketService {
 
         this.ws.onclose = (event) => {
             console.log('WebSocket disconnected:', event.code, event.reason, 'clean:', event.wasClean);
-            this.ws = null; // Очищаем ссылку на закрытое соединение
-            
-            // Код 1006 (abnormal closure) может означать, что сервер отклонил соединение (например, 401)
-            // Код 1008 (policy violation) может означать проблему с авторизацией
-            // Не переподключаемся при этих ошибках
+            this.ws = null;
+
             if (event.code === 1006 || event.code === 1008 || event.code === 1002) {
                 console.log('WebSocket connection rejected by server (likely authentication issue). Stopping reconnection.');
                 this.shouldReconnect = false;
@@ -90,7 +81,6 @@ class WebSocketService {
 
         this.ws.onerror = (err) => {
             console.error('WebSocket error:', err);
-            // НЕ закрываем соединение при ошибке - браузер сам обработает
             this.trigger('error', err);
         };
     }
@@ -145,7 +135,7 @@ class WebSocketService {
         return this.ws?.readyState === WebSocket.OPEN;
     }
 
-    // Метод для переподключения после авторизации
+    // метод для переподключения после авторизации
     reconnectAfterAuth(): void {
         if (!this.isConnected()) {
             this.shouldReconnect = true;
@@ -155,5 +145,4 @@ class WebSocketService {
     }
 }
 
-// Singleton instance
 export const wsService = new WebSocketService();

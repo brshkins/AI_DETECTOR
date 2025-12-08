@@ -34,7 +34,6 @@ func (p *Config) DSN() string {
 		p.DBHost, p.DBPort, p.DBUser, p.DBPassword, p.DBName, p.DBSSLMode)
 }
 
-// DSNForLog безопасный вывод DSN без пароля для логирования
 func (p *Config) DSNForLog() string {
 	return fmt.Sprintf("host=%s port=%s user=%s password=*** dbname=%s sslmode=%s",
 		p.DBHost, p.DBPort, p.DBUser, p.DBName, p.DBSSLMode)
@@ -45,7 +44,6 @@ func (c *Config) IsDev() bool {
 }
 
 func LoadConfig() *Config {
-	// Загрузка .env файла (если существует)
 	if err := godotenv.Load(); err != nil {
 		// Игнорируем ошибку, если файл не найден - используем переменные окружения системы
 		log.Println("No .env file found, using system environment variables")

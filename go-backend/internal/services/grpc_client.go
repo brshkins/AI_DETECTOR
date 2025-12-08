@@ -27,27 +27,25 @@ func NewGRPCClient(url string) (*GRPCClient, error) {
 			grpc.MaxCallSendMsgSize(50*1024*1024),
 		),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                30 * time.Second,  // Increased from 10s to reduce ping frequency
-			Timeout:             10 * time.Second,  // Increased from 3s
-			PermitWithoutStream: false,             // Changed to false to reduce pings when idle
+			Time:                30 * time.Second,
+			Timeout:             10 * time.Second,
+			PermitWithoutStream: false,
 		}),
 	}
 
-	// Use WithBlock to wait for connection to be ready
 	opts = append(opts, grpc.WithBlock())
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	conn, err := grpc.DialContext(ctx, url, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to Python gRPC server at %s: %s", url, err)
 	}
 
-	// Wait for connection to be ready
 	ctxReady, cancelReady := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelReady()
-	
+
 	for {
 		state := conn.GetState()
 		if state.String() == "READY" {
@@ -74,7 +72,6 @@ func (gc *GRPCClient) ProcessFrame(ctx context.Context, frame *pb.VideoFrame) (*
 		return nil, fmt.Errorf("gRPC client is not initialized")
 	}
 
-	// Check connection state before making call
 	state := gc.conn.GetState()
 	if state.String() != "READY" {
 		return nil, fmt.Errorf("gRPC connection not ready (state: %s)", state.String())
@@ -104,7 +101,6 @@ func (gc *GRPCClient) HealthCheck() bool {
 		return false
 	}
 
-	// Check connection state
 	state := gc.conn.GetState()
 	if state.String() != "READY" {
 		log.Printf("gRPC connection state: %s (not READY)", state.String())

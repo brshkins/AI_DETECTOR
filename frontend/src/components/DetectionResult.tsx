@@ -40,12 +40,6 @@ export const DetectionResult: React.FC<DetectionResultProps> = ({ result }) => {
     <div className="detection-result">
       <div className="detection-header">
         <h3>Результаты</h3>
-        <span
-          className="alert-badge"
-          style={{ backgroundColor: getAlertColor(result.alert_level) }}
-        >
-          {result.alert_level.toUpperCase()}
-        </span>
       </div>
 
       <div className="detection-content">

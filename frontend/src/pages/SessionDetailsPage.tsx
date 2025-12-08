@@ -5,6 +5,7 @@ import type { Session, Event } from '../types';
 import { Navbar } from '../components/Navbar';
 import { DecorativeElements } from '../components/DecorativeElements';
 import './SessionDetailsPage.css';
+import '../components/EventHistory.tsx'
 
 export const SessionDetailsPage: React.FC = () => {
     const { sessionId } = useParams<{ sessionId: string }>();
@@ -14,6 +15,8 @@ export const SessionDetailsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<'all' | 'drowsy' | 'alert'>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const eventsPerPage = 10;
 
     useEffect(() => {
         if (!sessionId) {
@@ -49,6 +52,10 @@ export const SessionDetailsPage: React.FC = () => {
         loadData();
     }, [sessionId, navigate]);
 
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filter]);
+
     const countStateChanges = (events: Event[]): number => {
         if (events.length < 2) return 0;
         let changes = 0;
@@ -62,7 +69,6 @@ export const SessionDetailsPage: React.FC = () => {
 
     const combineConsecutiveEvents = (events: Event[]): Array<Event & { duration?: number; count?: number }> => {
         if (events.length === 0) return [];
-
         const combined: Array<Event & { duration?: number; count?: number }> = [];
         let currentGroup: Event[] = [events[0]];
 
@@ -102,16 +108,97 @@ export const SessionDetailsPage: React.FC = () => {
         return combined;
     };
 
+    const combineEventsByPercentageRange = (events: Event[]): Array<Event & { duration?: number; count?: number }> => {
+        if (events.length === 0) return [];
+
+        const combined: Array<Event & { duration?: number; count?: number }> = [];
+        let currentGroup: Event[] = [events[0]];
+
+        const getPercentageRange = (score: number): number => {
+            const percentage = Math.round(score * 100);
+            return Math.floor(percentage / 10) * 10;
+        };
+
+        for (let i = 1; i < events.length; i++) {
+            const prevEvent = events[i - 1];
+            const currentEvent = events[i];
+            const currentRange = getPercentageRange(currentEvent.drowsiness_score);
+            const prevRange = getPercentageRange(prevEvent.drowsiness_score);
+
+            if (
+                prevEvent.is_drowsy === currentEvent.is_drowsy &&
+                currentRange === prevRange
+            ) {
+                currentGroup.push(currentEvent);
+            } else {
+                const mostRecentTime = new Date(currentGroup[0].timestamp).getTime();
+                const oldestTime = new Date(currentGroup[currentGroup.length - 1].timestamp).getTime();
+                const duration = Math.floor((mostRecentTime - oldestTime) / 1000);
+
+                const averageScore =
+                    currentGroup.reduce((sum, e) => sum + e.drowsiness_score, 0) /
+                    currentGroup.length;
+
+                combined.push({
+                    ...currentGroup[0],
+                    drowsiness_score: averageScore,
+                    duration,
+                    count: currentGroup.length,
+                });
+
+                currentGroup = [currentEvent];
+            }
+        }
+
+        if (currentGroup.length > 0) {
+            const mostRecentTime = new Date(currentGroup[0].timestamp).getTime();
+            const oldestTime = new Date(currentGroup[currentGroup.length - 1].timestamp).getTime();
+            const duration = Math.floor((mostRecentTime - oldestTime) / 1000);
+
+            const averageScore =
+                currentGroup.reduce((sum, e) => sum + e.drowsiness_score, 0) /
+                currentGroup.length;
+
+            combined.push({
+                ...currentGroup[0],
+                drowsiness_score: averageScore,
+                duration,
+                count: currentGroup.length,
+            });
+        }
+
+        return combined;
+    };
+
     const filteredEvents = (events || []).filter((event) => {
         if (filter === 'drowsy') return event.is_drowsy;
         if (filter === 'alert') return !event.is_drowsy;
         return true;
     });
 
-    // Группировка только если filter === 'all'
-    const displayEvents = filter === 'all'
-        ? combineConsecutiveEvents(filteredEvents)
-        : filteredEvents; // Для drowsy и alert без группировки
+    const displayEvents = filter === "all"
+            ? combineConsecutiveEvents(filteredEvents)
+            : combineEventsByPercentageRange(filteredEvents);
+
+    const totalPages = Math.ceil(displayEvents.length / eventsPerPage);
+    const startIndex = (currentPage - 1) * eventsPerPage;
+    const currentEvents = displayEvents.slice(startIndex, startIndex + eventsPerPage);
+
+    const handleNextPage = () => {
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+        }
+    };
+
+    const handlePrevPage = () => {
+        if (currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        }
+    };
+
+    const handleFirstPage = () => {
+        setCurrentPage(1);
+    };
 
     const stateChanges = countStateChanges(events || []);
 
@@ -268,8 +355,9 @@ export const SessionDetailsPage: React.FC = () => {
                             <p>События не найдены</p>
                         </div>
                     ) : (
-                        <div className="event-list">
-                            {displayEvents.map((event, index) => {
+                        <>
+                            <div className="event-list">
+                                {currentEvents.map((event, index) => {
                                 const avgScore = 'drowsiness_score' in event ? event.drowsiness_score : 0;
                                 const durationMinutes = event.duration ? Math.floor(event.duration / 60) : 0;
                                 const durationSeconds = event.duration ? event.duration % 60 : 0;
@@ -310,6 +398,36 @@ export const SessionDetailsPage: React.FC = () => {
                                 );
                             })}
                         </div>
+                        <div className="pagination">
+                            {currentPage > 1 && (
+                                <>
+                                    <button
+                                        onClick={handleFirstPage}
+                                        className="btn btn-primary btn-pagination"
+                                    >
+                                        В начало
+                                    </button>
+                                    <button
+                                        onClick={handlePrevPage}
+                                        className="btn btn-secondary btn-pagination"
+                                    >
+                                        ← Предыдущая
+                                    </button>
+                                </>
+                            )}
+                            <span className="pagination-info">
+                                Страница {currentPage} из {totalPages}
+                            </span>
+                            {currentPage < totalPages && (
+                                <button
+                                    onClick={handleNextPage}
+                                    className="btn btn-primary btn-pagination"
+                                >
+                                    Следующая →
+                                </button>
+                            )}
+                        </div>
+                        </>
                     )}
                 </div>
             </div>

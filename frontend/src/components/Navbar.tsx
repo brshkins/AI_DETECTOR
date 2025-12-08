@@ -22,40 +22,16 @@ export const Navbar: React.FC = () => {
 
   return (
     <nav className="navbar">
-      <div className="navbar-content">
-        <div className="navbar-brand">
-          <h2>🌠 Детектор сонливости</h2>
-        </div>
-        <div className="navbar-user">
-          <span className="user-info">
-            {user?.username || user?.email}
-          </span>
-          <button onClick={handleLogout} className="btn btn-secondary btn-sm">
-            Выйти
-          </button>
-        </div>
+      <div className="navbar-brand">
+        <span>🌠</span>
+        <span>Детектор сонливости</span>
+      </div>
+      <div className="navbar-right">
+        <span className="user-name">{user?.username || user?.email}</span>
+        <button onClick={handleLogout} className="btn-logout">
+          Выйти
+        </button>
       </div>
     </nav>
   );
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
